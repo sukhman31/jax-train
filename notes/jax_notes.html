@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JAX Learning Notes</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e0f;
+    --surface: #161618;
+    --surface2: #1e1e21;
+    --border: #2a2a2e;
+    --border2: #38383e;
+    --text: #e8e6e0;
+    --muted: #888580;
+    --accent: #c9a96e;
+    --accent2: #7eb8a4;
+    --accent3: #9b8fd4;
+    --danger: #e07070;
+    --code-bg: #131315;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 300;
+    line-height: 1.75;
+    font-size: 16px;
+  }
+
+  /* Layout */
+  .shell { display: flex; min-height: 100vh; }
+  nav {
+    width: 240px;
+    min-width: 240px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 0.5px solid var(--border);
+    padding: 2rem 0;
+    background: var(--surface);
+  }
+  main { flex: 1; max-width: 780px; padding: 3rem 3.5rem; }
+
+  /* Nav */
+  .nav-logo {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .12em;
+    color: var(--accent);
+    padding: 0 1.5rem 1.5rem;
+    border-bottom: 0.5px solid var(--border);
+    margin-bottom: 1.5rem;
+    text-transform: uppercase;
+  }
+  .nav-section {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: .5rem 1.5rem .25rem;
+    margin-top: .75rem;
+  }
+  nav a {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    color: var(--muted);
+    text-decoration: none;
+    padding: .35rem 1.5rem;
+    border-left: 2px solid transparent;
+    transition: all .15s;
+  }
+  nav a:hover { color: var(--text); border-left-color: var(--border2); }
+  nav a.active { color: var(--accent); border-left-color: var(--accent); }
+
+  /* Typography */
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-size: 2.4rem;
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--text);
+    margin-bottom: .5rem;
+  }
+  h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: var(--text);
+    margin: 3rem 0 1rem;
+    padding-top: 3rem;
+    border-top: 0.5px solid var(--border);
+  }
+  h2:first-of-type { border-top: none; padding-top: 0; margin-top: 1.5rem; }
+  h3 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    margin: 2rem 0 .75rem;
+  }
+  p { margin-bottom: 1rem; color: var(--text); }
+  .lead {
+    font-size: 1.05rem;
+    color: var(--muted);
+    margin-bottom: 2rem;
+    line-height: 1.8;
+  }
+
+  /* Code */
+  code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    background: var(--code-bg);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+    border: 0.5px solid var(--border);
+  }
+  pre {
+    background: var(--code-bg);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    position: relative;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #c9c5bc;
+    font-size: 12.5px;
+    line-height: 1.75;
+  }
+  .kw { color: #9b8fd4; }
+  .fn { color: #7eb8a4; }
+  .st { color: #c9a96e; }
+  .cm { color: #555450; font-style: italic; }
+  .num { color: #e07070; }
+
+  /* Callouts */
+  .callout {
+    border-left: 2px solid var(--border2);
+    padding: .75rem 1.25rem;
+    margin: 1.25rem 0;
+    border-radius: 0 6px 6px 0;
+    background: var(--surface2);
+    font-size: 14.5px;
+    line-height: 1.7;
+  }
+  .callout.insight { border-left-color: var(--accent); }
+  .callout.warning { border-left-color: var(--danger); }
+  .callout.tip { border-left-color: var(--accent2); }
+  .callout-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    margin-bottom: .4rem;
+  }
+  .callout.insight .callout-label { color: var(--accent); }
+  .callout.warning .callout-label { color: var(--danger); }
+  .callout.tip .callout-label { color: var(--accent2); }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 13.5px; }
+  th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+    padding: .6rem 1rem;
+    border-bottom: 0.5px solid var(--border2);
+  }
+  td { padding: .6rem 1rem; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 11.5px; }
+
+  /* Hero */
+  .hero {
+    padding: 2rem 0 1rem;
+    margin-bottom: 1rem;
+  }
+  .hero-meta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1rem;
+  }
+
+  /* Section marker */
+  .section-mark {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: .1em;
+    margin-bottom: .25rem;
+  }
+
+  /* Inline highlight */
+  .hl { color: var(--accent2); }
+  .hl2 { color: var(--accent); }
+  .hl3 { color: var(--accent3); }
+
+  /* Flow diagram (text-based) */
+  .flow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    line-height: 2;
+    color: var(--muted);
+    padding: 1rem 1.5rem;
+    background: var(--code-bg);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    margin: 1rem 0 1.5rem;
+  }
+  .flow .node { color: var(--text); }
+  .flow .arrow { color: var(--accent); }
+  .flow .label { color: var(--accent3); }
+
+  /* Divider */
+  hr { border: none; border-top: 0.5px solid var(--border); margin: 2.5rem 0; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+<nav>
+  <div class="nav-logo">JAX Notes</div>
+  <div class="nav-section">Foundations</div>
+  <a href="#transforms">Core transforms</a>
+  <a href="#pytrees">Pytrees</a>
+  <a href="#tracing">Tracing</a>
+  <div class="nav-section">Exercise 1</div>
+  <a href="#mlp-arch">MLP architecture</a>
+  <a href="#transforms-order">Transform order</a>
+  <a href="#in-axes">in_axes</a>
+  <a href="#mean-grads">Averaging grads</a>
+  <a href="#training-loop">Training loop</a>
+  <div class="nav-section">Exercise 2</div>
+  <a href="#custom-pytree">Custom pytree</a>
+  <a href="#grad-returns">grad return type</a>
+  <a href="#wrt">What we differentiate</a>
+</nav>
+
+<main>
+
+  <div class="hero">
+    <div class="hero-meta">JAX Learning — Exercises 1 &amp; 2</div>
+    <h1>Study Notes</h1>
+    <p class="lead">Notes compiled from building an MLP from scratch and implementing a custom pytree class — covering transform composition, vmap batching, gradient averaging, and the flatten/unflatten contract.</p>
+  </div>
+
+  <!-- FOUNDATIONS -->
+
+  <section id="transforms">
+    <h2>Core transforms</h2>
+    <p>JAX has three primary transforms. Each is a <em>function transformation</em> — it takes a function and returns a new function.</p>
+
+    <table>
+      <tr><th>Transform</th><th>What it does</th><th>Works on</th></tr>
+      <tr><td><code>jax.grad(f)</code></td><td>Returns gradient of f w.r.t. first arg</td><td>Single sample</td></tr>
+      <tr><td><code>jax.jit(f)</code></td><td>Compiles f via XLA — fast after first call</td><td>Anything</td></tr>
+      <tr><td><code>jax.vmap(f)</code></td><td>Batches f over an array axis automatically</td><td>Single sample → batch</td></tr>
+    </table>
+
+    <div class="callout insight">
+      <div class="callout-label">Key insight</div>
+      All three compose freely. You can wrap them in any order — each one just sees a function and returns a function.
+    </div>
+  </section>
+
+  <section id="pytrees">
+    <h2>Pytrees</h2>
+    <p>A pytree is any nested structure JAX can flatten into a list of arrays and unflatten back. Built-in nodes: <code>list</code>, <code>dict</code>, <code>tuple</code>. Custom classes need registration.</p>
+
+    <table>
+      <tr><th>Type</th><th>JAX sees it as</th></tr>
+      <tr><td><code>{"w1": arr, "b1": arr}</code></td><td>Node — walks inside</td></tr>
+      <tr><td><code>[arr1, arr2]</code></td><td>Node — walks inside</td></tr>
+      <tr><td><code>jnp.array(...)</code></td><td>Leaf — stops here</td></tr>
+      <tr><td><code>(2, 3)</code> tuple of ints</td><td>Node — walks inside (gotcha!)</td></tr>
+    </table>
+  </section>
+
+  <section id="tracing">
+    <h2>Tracing</h2>
+    <p>When <code>jit</code> runs your function the first time, it replaces inputs with abstract tracers — placeholders that know shape and dtype but carry no values. JAX records every operation into a computation graph, then XLA compiles that graph.</p>
+
+    <div class="callout warning">
+      <div class="callout-label">Gotcha</div>
+      <code>if jnp.sum(x) &gt; 0</code> fails inside <code>jit</code> — the comparison produces a traced bool, not a real one. Use <code>jnp.where</code> or <code>lax.cond</code> instead.
+    </div>
+
+    <h3>Static vs traced</h3>
+    <pre><code><span class="kw">import</span> numpy <span class="kw">as</span> np       <span class="cm"># static — stays in Python, compile-time</span>
+<span class="kw">import</span> jax.numpy <span class="kw">as</span> jnp  <span class="cm"># traced — becomes part of the graph</span>
+
+<span class="cm"># x.shape is static — safe to use in range()</span>
+<span class="kw">for</span> i <span class="kw">in</span> range(x.shape[<span class="num">0</span>]): ...  <span class="cm"># ✅</span>
+
+<span class="cm"># jnp.array(x.shape) is traced — can't use in range()</span>
+<span class="kw">for</span> i <span class="kw">in</span> range(jnp.array(x.shape).prod()): ...  <span class="cm"># ❌</span></code></pre>
+  </section>
+
+  <!-- EXERCISE 1 -->
+
+  <section id="mlp-arch">
+    <h2>Exercise 1 — MLP architecture</h2>
+    <p>The network takes a <code>(2,)</code> input and produces a <code>(2,)</code> output via a hidden layer of 4 neurons.</p>
+
+    <h3>Params dict — shapes explained</h3>
+    <pre><code>params = {
+    <span class="st">"w1"</span>: shape (<span class="num">4</span>, <span class="num">2</span>),   <span class="cm"># 4 hidden neurons, each connected to 2 inputs</span>
+    <span class="st">"b1"</span>: shape (<span class="num">4</span>,),      <span class="cm"># one bias per hidden neuron</span>
+    <span class="st">"w2"</span>: shape (<span class="num">2</span>, <span class="num">4</span>),   <span class="cm"># 2 outputs, each connected to 4 hidden neurons</span>
+    <span class="st">"b2"</span>: shape (<span class="num">2</span>,),      <span class="cm"># one bias per output neuron</span>
+}</code></pre>
+
+    <h3>Forward pass — shape flow</h3>
+    <pre><code><span class="kw">def</span> <span class="fn">forward</span>(x, params):
+    <span class="cm"># x: (2,)</span>
+    h = jax.nn.relu(jnp.dot(params[<span class="st">"w1"</span>], x) + params[<span class="st">"b1"</span>])
+    <span class="cm"># (4,2)@(2,) + (4,) → (4,)</span>
+    y = jnp.dot(params[<span class="st">"w2"</span>], h) + params[<span class="st">"b2"</span>]
+    <span class="cm"># (2,4)@(4,) + (2,) → (2,)</span>
+    <span class="kw">return</span> y</code></pre>
+  </section>
+
+  <section id="transforms-order">
+    <h3>Transform composition order</h3>
+    <p>Build inside-out. Each layer wraps the one inside it:</p>
+
+    <div class="flow">
+      <span class="node">loss(params, x, target)</span>   <span class="cm">← single sample, returns scalar</span><br>
+      <span class="arrow">↓ wrap with grad</span><br>
+      <span class="node">grad_fn(params, x, target)</span>  <span class="cm">← single sample, returns gradients</span><br>
+      <span class="arrow">↓ wrap with vmap</span><br>
+      <span class="node">batch_grad_fn(params, xs, targets)</span>  <span class="cm">← whole batch</span><br>
+      <span class="arrow">↓ wrap with jit</span><br>
+      <span class="node">jit_grad(params, xs, targets)</span>  <span class="cm">← whole batch, compiled</span>
+    </div>
+
+    <pre><code>grad_fn       = jax.grad(loss, argnums=<span class="num">2</span>)
+batch_grad_fn = jax.vmap(grad_fn, in_axes=(<span class="num">0</span>, <span class="num">0</span>, <span class="kw">None</span>))
+jit_grad      = jax.jit(batch_grad_fn)</code></pre>
+
+    <div class="callout insight">
+      <div class="callout-label">Why this order</div>
+      <code>jit(vmap(grad))</code> compiles the entire batched computation as one graph. Reversing to <code>vmap(jit(grad))</code> compiles each sample separately — N compiled calls instead of one.
+    </div>
+  </section>
+
+  <section id="in-axes">
+    <h3>in_axes — mapping arguments to batch axes</h3>
+    <p><code>in_axes</code> is a tuple with one value per function argument. It tells vmap how to handle each one:</p>
+
+    <table>
+      <tr><th>Value</th><th>Meaning</th></tr>
+      <tr><td><code>0</code></td><td>Slice along axis 0 — one slice per batch element</td></tr>
+      <tr><td><code>1</code></td><td>Slice along axis 1</td></tr>
+      <tr><td><code>None</code></td><td>Don't slice — same value for every batch element</td></tr>
+    </table>
+
+    <pre><code><span class="cm"># grad_fn(params, x, target)</span>
+jax.vmap(grad_fn, in_axes=(<span class="kw">None</span>, <span class="num">0</span>, <span class="num">0</span>))
+<span class="cm">#                    ↑      ↑    ↑</span>
+<span class="cm">#                 params    x  target</span>
+<span class="cm">#                 shared  batch batch</span></code></pre>
+
+    <div class="callout warning">
+      <div class="callout-label">Common mistake</div>
+      Getting the order wrong — <code>in_axes=(0, 0, None)</code> would try to slice <code>params</code> along axis 0, which slices into the weight matrices. The error message says "vmap got inconsistent sizes for array axes to be mapped" and lists your param shapes as evidence.
+    </div>
+  </section>
+
+  <section id="mean-grads">
+    <h3>Averaging gradients across the batch</h3>
+    <p>Because you vmapped over the batch, <code>jit_grad</code> returns one gradient per sample — an extra batch dimension on every array:</p>
+
+    <pre><code><span class="cm"># params["w1"] shape: (4, 2)</span>
+<span class="cm"># grads["w1"]  shape: (10, 4, 2)  ← extra batch dim from vmap</span>
+
+<span class="cm"># Can't subtract directly — shapes don't match</span>
+<span class="cm"># Must average first:</span>
+mean_grads = jax.tree.map(<span class="kw">lambda</span> g: jnp.mean(g, axis=<span class="num">0</span>), grads)
+<span class="cm"># mean_grads["w1"] shape: (4, 2)  ← back to param shape</span></code></pre>
+
+    <p><code>jax.tree.map</code> walks the entire dict and applies the function to every leaf — no need to handle each key separately.</p>
+  </section>
+
+  <section id="training-loop">
+    <h3>Full training loop</h3>
+    <pre><code>lr = <span class="num">0.01</span>
+batch_loss = jax.jit(jax.vmap(loss, in_axes=(<span class="num">0</span>, <span class="num">0</span>, <span class="kw">None</span>)))
+
+<span class="kw">for</span> i <span class="kw">in</span> range(num_steps):
+    grads = jit_grad(xs, targets, params)
+    mean_grads = jax.tree.map(<span class="kw">lambda</span> g: jnp.mean(g, axis=<span class="num">0</span>), grads)
+    params = jax.tree.map(<span class="kw">lambda</span> p, g: p - lr * g, params, mean_grads)
+
+    <span class="kw">if</span> i % <span class="num">10</span> == <span class="num">0</span>:
+        losses = batch_loss(xs, targets, params)
+        print(f<span class="st">"step {i}  loss {jnp.mean(losses):.4f}"</span>)</code></pre>
+
+    <div class="callout tip">
+      <div class="callout-label">What to watch</div>
+      Mean loss should decrease each print. If it goes up, your learning rate is too high. If it barely moves, it's too low. Try values between <code>0.001</code> and <code>0.1</code>.
+    </div>
+  </section>
+
+  <!-- EXERCISE 2 -->
+
+  <section id="custom-pytree">
+    <h2>Exercise 2 — Custom pytree</h2>
+    <p>For JAX to transform through a custom class, it needs to know how to break it apart and put it back together.</p>
+
+    <h3>The three buckets</h3>
+    <table>
+      <tr><th>Bucket</th><th>What goes in</th><th>JAX behaviour</th></tr>
+      <tr><td>Leaves</td><td>Arrays to transform</td><td>Differentiated, compiled, batched</td></tr>
+      <tr><td>Aux</td><td>Static metadata</td><td>Frozen at trace time, handed back to unflatten</td></tr>
+      <tr><td>Neither</td><td>Transient data</td><td>Dropped — gone after any transform</td></tr>
+    </table>
+
+    <h3>Implementation</h3>
+    <pre><code>@jax.tree_util.register_pytree_node_class
+<span class="kw">class</span> <span class="fn">Parameter</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, value, name: str, frozen: bool = <span class="kw">False</span>):
+        self.value  = value    <span class="cm"># array  → leaf</span>
+        self.name   = name     <span class="cm"># string → aux</span>
+        self.frozen = frozen   <span class="cm"># bool   → aux</span>
+
+    <span class="kw">def</span> <span class="fn">tree_flatten</span>(self):
+        leaves = (self.value,)
+        aux    = (self.name, self.frozen)
+        <span class="kw">return</span> leaves, aux
+
+    @<span class="fn">classmethod</span>
+    <span class="kw">def</span> <span class="fn">tree_unflatten</span>(cls, aux, leaves):
+        name, frozen = aux
+        value,       = leaves
+        <span class="kw">return</span> cls(value, name, frozen)</code></pre>
+
+    <div class="callout warning">
+      <div class="callout-label">Aux must be hashable</div>
+      JAX uses aux as part of its JIT cache key. Tuples of strings and bools are fine. Lists and arrays are not — they'll raise a <code>TypeError</code>.
+    </div>
+  </section>
+
+  <section id="grad-returns">
+    <h3>Why grad returns a Parameter, not an array</h3>
+    <p>It's the <code>unflatten</code> function that rebuilds the object — <code>grad</code> itself knows nothing about <code>Parameter</code>.</p>
+
+    <div class="flow">
+      <span class="label">input</span>   <span class="node">Parameter(value=[1,2,3], name="weights")</span><br>
+      <span class="arrow">↓ tree_flatten</span><br>
+      <span class="node">leaves=[[1,2,3]]</span>  <span class="node">aux=("weights", False)</span><br>
+      <span class="arrow">↓ grad differentiates leaves</span><br>
+      <span class="node">leaves=[[2,4,6]]</span>  <span class="node">aux=("weights", False)  ← same aux</span><br>
+      <span class="arrow">↓ tree_unflatten</span><br>
+      <span class="label">output</span>  <span class="node">Parameter(value=[2,4,6], name="weights")</span>
+    </div>
+
+    <p>JAX stores the aux from step 1 and passes it directly to unflatten in step 4. That's how the name and frozen flag survive — they never went through differentiation at all.</p>
+  </section>
+
+  <section id="wrt">
+    <h3>What we're differentiating with respect to</h3>
+    <p>When you call <code>grad(f)(p)</code> where <code>p</code> is a <code>Parameter</code>, you differentiate w.r.t. <strong>all leaves</strong> of <code>p</code>.</p>
+
+    <pre><code>p = Parameter(jnp.array([<span class="num">1.</span>, <span class="num">2.</span>, <span class="num">3.</span>]), name=<span class="st">"weights"</span>)
+
+<span class="cm"># leaves = [array([1., 2., 3.])]  ← differentiated</span>
+<span class="cm"># aux    = ("weights", False)      ← invisible to grad</span>
+
+grad(<span class="kw">lambda</span> p: jnp.sum(p.value ** <span class="num">2</span>))(p)
+<span class="cm"># ∂/∂value [ sum(value²) ] = 2 * value = [2., 4., 6.]</span></code></pre>
+
+    <p>If your class had two array fields, grad would return a <code>Parameter</code> where both fields hold their respective gradients — one gradient value per leaf.</p>
+
+    <div class="callout insight">
+      <div class="callout-label">General rule</div>
+      <code>grad</code> differentiates w.r.t. all leaves of the input pytree. Aux is completely invisible to it.
+    </div>
+  </section>
+
+</main>
+</div>
+
+<script>
+const sections = document.querySelectorAll('section[id]');
+const links = document.querySelectorAll('nav a');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const active = document.querySelector(`nav a[href="#${e.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { threshold: 0.3 });
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
