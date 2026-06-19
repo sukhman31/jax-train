@@ -18,7 +18,7 @@ class Embedding(nnx.Module):
         positions = token_ids_batch.shape[1]
         positional_encodings = self.positional[:positions] 
         print(positional_encodings.shape)
-        return embeddings
+        return embeddings + positional_encodings
     
 rngs = nnx.Rngs(0)
 emb  = Embedding(1000, 64, 256, rngs)
