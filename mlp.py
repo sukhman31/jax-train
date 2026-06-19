@@ -37,6 +37,8 @@ def main():
     targets = jax.random.normal(data_key, (10,2))
 
     for i in range(num_batches):
+        #vmap over grad_fn means each param gets a gradient per sample so it will be like (n, shape_0, shape_1) and then we have to averge
+        #over n
         loss_grad = jit_grad(xs,targets,params)
         mean_grads = jax.tree.map(lambda g: jnp.mean(g, axis=0), loss_grad)
 
