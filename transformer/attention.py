@@ -14,8 +14,9 @@ class ScaledDotProdAttention(nnx.Module):
         self.v = nnx.Param(
             jax.random.normal(rngs.params(),(input_dim,output_dim))
         )
+        self.dropout = nnx.Dropout(0.2)
     
-    def __call__(self,embeddings):
+    def __call__(self,embeddings,rngs: nnx.Rngs):
         query = embeddings @ self.q.value
         key = embeddings @ self.k.value
         value = embeddings @ self.v.value
@@ -23,5 +24,6 @@ class ScaledDotProdAttention(nnx.Module):
         mask = jnp.tril(jnp.ones((attention_scores.shape[-1],attention_scores.shape[-1]), dtype=bool))
         attention_scores = jnp.where(mask,attention_scores,-jnp.inf)
         attention_weights = nnx.softmax(attention_scores/key.shape[-1]**0.5,axis=-1)
+        attention_weights = self.dropout(attention_weights, rngs=rngs)
         attention = attention_weights @ value
         return attention

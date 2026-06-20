@@ -23,5 +23,5 @@ token_ids = jnp.array([[3, 14, 56], [4, 42, 7]])  # (batch=2, seq_len=3)
 x = embedding(token_ids)
 print(f"after embedding:  {x.shape}")   # (2, 3, 64)
 
-x = attention(x)
+x = attention(x, RNGS)
 print(f"after attention:  {x.shape}")   # (2, 3, 32)
