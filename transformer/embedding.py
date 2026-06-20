@@ -19,11 +19,3 @@ class Embedding(nnx.Module):
         positional_encodings = self.positional[:positions] 
         print(positional_encodings.shape)
         return embeddings + positional_encodings
-    
-rngs = nnx.Rngs(0)
-emb  = Embedding(1000, 64, 256, rngs)
-
-token_ids = jnp.array([[3,14,56],[4, 42, 7]])
-print(token_ids.shape)
-vectors = emb(token_ids)
-print(vectors.shape)
