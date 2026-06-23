@@ -4,7 +4,7 @@ import jax.numpy as jnp
 
 class ScaledDotProdAttention(nnx.Module):
 
-    def __init__(self,input_dim,output_dim,rngs: nnx.Rngs):
+    def __init__(self, input_dim, output_dim, rngs: nnx.Rngs):
         self.q = nnx.Param(
             jax.random.normal(rngs.params(),(input_dim,output_dim))
         )
@@ -16,7 +16,7 @@ class ScaledDotProdAttention(nnx.Module):
         )
         self.dropout = nnx.Dropout(0.2)
     
-    def __call__(self,embeddings,rngs: nnx.Rngs):
+    def __call__(self, embeddings, rngs: nnx.Rngs):
         query = embeddings @ self.q.value
         key = embeddings @ self.k.value
         value = embeddings @ self.v.value
@@ -31,7 +31,7 @@ class ScaledDotProdAttention(nnx.Module):
 
 class MultiHeadAttention(nnx.Module):
     
-    def __init__(self,input_dim,output_dim,num_heads,rngs: nnx.Rngs):
+    def __init__(self, input_dim, output_dim, num_heads, rngs: nnx.Rngs):
         assert output_dim % num_heads == 0, "output_dim must be divisible by num_heads"
         self.num_heads = num_heads
         self.head_dim = output_dim//num_heads
@@ -46,7 +46,7 @@ class MultiHeadAttention(nnx.Module):
         )
         self.dropout = nnx.Dropout(0.2)
     
-    def __call__(self,embeddings,rngs: nnx.Rngs):
+    def __call__(self, embeddings, rngs: nnx.Rngs):
         b, tokens, _ = embeddings.shape
 
         query = embeddings @ self.q.value
