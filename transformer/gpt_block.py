@@ -1,6 +1,5 @@
 from flax import nnx
-import jax
-import jax.numpy as jnp
+
 from attention import MultiHeadAttention
 from layer_norm import LayerNorm
 from feed_forward import FeedForward

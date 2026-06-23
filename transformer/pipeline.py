@@ -7,51 +7,53 @@ from attention import ScaledDotProdAttention, MultiHeadAttention
 from layer_norm import LayerNorm
 from feed_forward import FeedForward
 from gpt_block import GPTBlock
+from model import Model
 
 # --- config ---
-VOCAB_SIZE     = 1000
-DIMS           = 64
-ATTENTION_DIMS = 32
-HEADS          = 4
-MAX_SEQ_LEN    = 256
-RNGS           = nnx.Rngs(0)
-
-# --- components ---
-embedding = Embedding(VOCAB_SIZE, DIMS, MAX_SEQ_LEN, RNGS)
-attention = ScaledDotProdAttention(DIMS, ATTENTION_DIMS, RNGS)
-mha = MultiHeadAttention(DIMS, ATTENTION_DIMS, HEADS, RNGS)
-layer_norm = LayerNorm(1e-5, ATTENTION_DIMS)
-ff = FeedForward(ATTENTION_DIMS, ATTENTION_DIMS * 4, use_bias=False, rngs=RNGS)
-
-BLOCK_CONFIG = {
-    'eps': 1e-5,
-    'embed_dim': DIMS,
-    'input_dim': DIMS,
-    'output_dim': DIMS,
-    'num_heads': HEADS,
+CONFIG = {
+    'vocab_size':    1000,
+    'embed_dim':     64,
+    'max_seq_len':   256,
+    'num_heads':     4,
+    'input_dim':     64,
+    'output_dim':    64,
     'scaling_factor': 4,
-    'dropout': 0.1,
+    'dropout':       0.1,
+    'eps':           1e-5,
+    'num_of_blocks': 2,
 }
-block = GPTBlock(BLOCK_CONFIG, RNGS)
+RNGS = nnx.Rngs(0)
 
 # --- dummy input ---
 token_ids = jnp.array([[3, 14, 56], [4, 42, 7]])  # (batch=2, seq_len=3)
 
-# --- forward pass ---
+# --- component checks ---
+embedding  = Embedding(CONFIG['vocab_size'], CONFIG['embed_dim'], CONFIG['max_seq_len'], RNGS)
+attention  = ScaledDotProdAttention(CONFIG['embed_dim'], CONFIG['output_dim'], RNGS)
+mha        = MultiHeadAttention(CONFIG['embed_dim'], CONFIG['output_dim'], CONFIG['num_heads'], RNGS)
+layer_norm = LayerNorm(CONFIG['eps'], CONFIG['embed_dim'])
+ff         = FeedForward(CONFIG['embed_dim'], CONFIG['embed_dim'] * CONFIG['scaling_factor'], use_bias=False, rngs=RNGS)
+block      = GPTBlock(CONFIG, RNGS)
+
 x = embedding(token_ids)
-print(f"after embedding:  {x.shape}")   # (2, 3, 64)
+print(f"after embedding:   {x.shape}")   # (2, 3, 64)
 
 y = attention(x, RNGS)
-print(f"after attention:  {y.shape}")   # (2, 3, 32)
+print(f"after attention:   {y.shape}")   # (2, 3, 64)
 
 z = mha(x, RNGS)
-print(f"after MHA:        {z.shape}")   # (2, 3, 32)
+print(f"after MHA:         {z.shape}")   # (2, 3, 64)
 
 n = layer_norm(z)
-print(f"after LayerNorm:  {n.shape}")   # (2, 3, 32)
+print(f"after LayerNorm:   {n.shape}")   # (2, 3, 64)
 
 f = ff(n)
-print(f"after FeedForward: {f.shape}")  # (2, 3, 32)
+print(f"after FeedForward: {f.shape}")   # (2, 3, 64)
 
 b = block(x, RNGS)
-print(f"after GPTBlock:    {b.shape}")  # (2, 3, 32)
+print(f"after GPTBlock:    {b.shape}")   # (2, 3, 64)
+
+# --- full model ---
+model  = Model(CONFIG, RNGS)
+logits = model(token_ids, RNGS)
+print(f"after Model:       {logits.shape}")  # (2, 3, 1000)

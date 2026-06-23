@@ -21,10 +21,10 @@ You have already built and understood:
 ### Phase 1 — Complete the GPT Architecture
 *Finish porting batran-lib to JAX. Everything here is architecture-level — no new concepts, just assembling what you know.*
 
-- [ ] `LayerNorm` — normalize activations per token
-- [ ] `FeedForward` — two linear layers with GELU activation
-- [ ] `GPTBlock` — MHA + LayerNorm + FeedForward + residual connections
-- [ ] `GPTModel` — stack of blocks + embedding + output head
+- [x] `LayerNorm` — normalize activations per token
+- [x] `FeedForward` — two linear layers with GELU activation
+- [x] `GPTBlock` — MHA + LayerNorm + FeedForward + residual connections
+- [x] `GPTModel` — stack of blocks + embedding + output head
 - [ ] End-to-end forward pass: tokens → logits
 
 **Resources:**
