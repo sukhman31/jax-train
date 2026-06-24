@@ -1,7 +1,10 @@
 from flax import nnx
 import jax
 import jax.numpy as jnp
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+from tokenizers.bpe_tokenizer import BPETokenizer
 from embedding import Embedding
 from attention import ScaledDotProdAttention, MultiHeadAttention
 from layer_norm import LayerNorm
@@ -24,8 +27,17 @@ CONFIG = {
 }
 RNGS = nnx.Rngs(0)
 
+# --- tokenizer ---
+tokenizer = BPETokenizer(max_merges=744)
+shakespeare_path = os.path.join(os.path.dirname(__file__), '..', 'resources', 'shakespeare_sample.txt')
+tokenizer.ingest_docs(shakespeare_path)
+encoded = tokenizer.encode("To be or not to be")
+decoded = tokenizer.decode(encoded)
+print(f"encoded: {encoded}")
+print(f"decoded: {decoded}")
+
 # --- dummy input ---
-token_ids = jnp.array([[3, 14, 56], [4, 42, 7]])  # (batch=2, seq_len=3)
+token_ids = jnp.array([encoded[:3], encoded[:3]])  # (batch=2, seq_len=3)
 
 # --- component checks ---
 embedding  = Embedding(CONFIG['vocab_size'], CONFIG['embed_dim'], CONFIG['max_seq_len'], RNGS)

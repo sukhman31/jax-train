@@ -1,6 +1,4 @@
 from flax import nnx
-import jax
-import jax.numpy as jnp
 
 from embedding import Embedding
 from gpt_block import GPTBlock
