@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPT Forward Pass — Interactive Flow</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e0f; --surface: #161618; --surface2: #1e1e21;
+    --border: #2a2a2e; --border2: #38383e;
+    --text: #e8e6e0; --muted: #888580;
+    --accent: #c9a96e; --accent2: #7eb8a4; --accent3: #9b8fd4;
+    --danger: #e07070; --code-bg: #131315;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Fraunces', Georgia, serif; font-weight: 300;
+    line-height: 1.7; font-size: 16px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 3rem 2rem 6rem; }
+  .hero-meta {
+    font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .15em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: .75rem;
+  }
+  h1 { font-family: 'Fraunces', serif; font-size: 2.2rem; font-weight: 500; margin-bottom: .5rem; }
+  .lead { color: var(--muted); font-size: 1.02rem; margin-bottom: 2.5rem; max-width: 640px; }
+  code {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12.5px;
+    background: var(--code-bg); color: var(--accent);
+    padding: 1px 6px; border-radius: 3px; border: 0.5px solid var(--border);
+  }
+
+  /* Pipeline rail */
+  .rail {
+    display: flex; align-items: center; gap: 0; overflow-x: auto;
+    padding: 1rem 0 2.5rem; margin-bottom: 1rem;
+  }
+  .stage {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px; letter-spacing: .02em;
+    color: var(--muted); background: var(--surface);
+    border: 1px solid var(--border2); border-radius: 8px;
+    padding: .75rem 1rem; white-space: nowrap; cursor: pointer;
+    transition: all .15s; flex-shrink: 0;
+  }
+  .stage:hover { color: var(--text); border-color: var(--accent2); }
+  .stage.active { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 500; }
+  .conn { color: var(--border2); font-size: 16px; flex-shrink: 0; padding: 0 .35rem; }
+  .conn.active { color: var(--accent); }
+
+  /* Controls */
+  .controls { display: flex; gap: .6rem; margin-bottom: 2rem; }
+  button.nav-btn {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text); background: var(--surface2);
+    border: 1px solid var(--border2); border-radius: 6px; padding: .5rem 1.1rem;
+    cursor: pointer; transition: all .15s;
+  }
+  button.nav-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button.nav-btn:disabled { opacity: .3; cursor: default; }
+
+  /* Detail panel */
+  .panel {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 12px; padding: 2rem 2.25rem;
+  }
+  .panel-tag {
+    display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--bg);
+    background: var(--accent2); padding: .2rem .65rem; border-radius: 4px; margin-bottom: .9rem;
+  }
+  .panel h2 { font-family: 'Fraunces', serif; font-size: 1.6rem; font-weight: 500; margin-bottom: .6rem; }
+  .panel .desc { color: var(--muted); margin-bottom: 1.4rem; max-width: 680px; }
+
+  .shape-row {
+    display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 1.25rem 0 1.5rem;
+  }
+  .shape-card {
+    font-family: 'IBM Plex Mono', monospace; background: var(--code-bg);
+    border: 0.5px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; min-width: 200px;
+  }
+  .shape-card .sc-label { font-size: 9px; letter-spacing: .15em; text-transform: uppercase; color: var(--muted); margin-bottom: .5rem; }
+  .shape-card .sc-shape { font-size: 20px; color: var(--accent); font-weight: 500; }
+  .shape-card .sc-note { font-size: 11px; color: var(--muted); margin-top: .4rem; line-height: 1.5; }
+  .shape-card.in .sc-shape { color: var(--accent3); }
+  .shape-card.out .sc-shape { color: var(--accent2); }
+
+  pre {
+    background: var(--code-bg); border: 0.5px solid var(--border); border-radius: 8px;
+    padding: 1.1rem 1.4rem; overflow-x: auto; margin: 1rem 0 1.4rem;
+  }
+  pre code { background: none; border: none; padding: 0; color: #c9c5bc; font-size: 12.5px; }
+  .kw { color: #9b8fd4; } .fn { color: #7eb8a4; } .st { color: #c9a96e; }
+  .cm { color: #555450; font-style: italic; } .num { color: #e07070; }
+
+  .example-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem; margin: 1rem 0 .5rem;
+  }
+  .ex-box {
+    background: var(--code-bg); border: 0.5px solid var(--border); border-radius: 8px; padding: 1rem 1.15rem;
+  }
+  .ex-box .ex-label {
+    font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent3); margin-bottom: .5rem;
+  }
+  .ex-box .ex-val { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--text); line-height: 1.6; }
+
+  .callout {
+    border-left: 2px solid var(--accent); padding: .75rem 1.25rem; margin: 1.25rem 0 0;
+    border-radius: 0 6px 6px 0; background: var(--surface2); font-size: 14px; line-height: 1.65;
+  }
+  .callout-label {
+    font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .15em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: .4rem;
+  }
+
+  .progress-dots { display: flex; gap: 6px; margin-top: 1.75rem; justify-content: center; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border2); transition: all .2s; }
+  .dot.active { background: var(--accent); width: 18px; border-radius: 3px; }
+
+  ::-webkit-scrollbar { height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero-meta">jax-learn — interactive walkthrough</div>
+  <h1>GPT Forward Pass: Shape by Shape</h1>
+  <p class="lead">Click any stage below to see exactly what shape enters, what shape leaves, and a concrete worked example with real numbers. Config: <code>batch=2, seq_len=3, embed_dim=64, num_heads=4, vocab_size=1000, num_of_blocks=2</code>.</p>
+
+  <div class="rail" id="rail"></div>
+
+  <div class="controls">
+    <button class="nav-btn" id="prevBtn">← Prev</button>
+    <button class="nav-btn" id="nextBtn">Next →</button>
+  </div>
+
+  <div class="panel" id="panel"></div>
+
+  <div class="progress-dots" id="dots"></div>
+</div>
+
+<script>
+const stages = [
+  {
+    tag: "input",
+    name: "Token IDs",
+    desc: "Raw input to the model — integer ids produced by the BPE tokenizer, one per token, for every sequence in the batch.",
+    inShape: null,
+    outShape: "(2, 3)",
+    outNote: "2 sequences, 3 tokens each",
+    code: `<span class="cm"># from tokenizer.encode("To be or")</span>
+token_ids = jnp.array([
+    [<span class="num">84</span>, <span class="num">111</span>, <span class="num">32</span>],   <span class="cm"># sequence 0</span>
+    [<span class="num">98</span>, <span class="num">101</span>, <span class="num">32</span>],    <span class="cm"># sequence 1</span>
+])
+<span class="cm"># shape (2, 3), dtype int32</span>`,
+    examples: [
+      { label: "dtype", val: "int32 — indices, never differentiated" },
+      { label: "note", val: "these are lookup keys into the embedding table, not floats" },
+    ],
+    callout: null,
+  },
+  {
+    tag: "transformer/embedding.py",
+    name: "Embedding",
+    desc: "Looks up a learned vector per token id, adds a learned vector per position, so the model gets both 'what token' and 'where in the sequence' information.",
+    inShape: "(2, 3)",
+    outShape: "(2, 3, 64)",
+    outNote: "each token id became a 64-dim vector",
+    code: `embeddings = self.embed[token_ids_batch]      <span class="cm"># (2,3,64) — table lookup</span>
+positions = token_ids_batch.shape[<span class="num">1</span>]     <span class="cm"># = 3</span>
+positional_encodings = self.positional[:positions]  <span class="cm"># (3,64)</span>
+<span class="kw">return</span> embeddings + positional_encodings   <span class="cm"># (2,3,64) + (3,64) → broadcasts</span>`,
+    examples: [
+      { label: "embed table", val: "shape (1000, 64) — one row per vocab entry" },
+      { label: "positional table", val: "shape (256, 64) — one row per position, sliced to 3" },
+      { label: "broadcast rule", val: "(3,64) is repeated identically across both batch items" },
+    ],
+    callout: "This is the ONLY place position information enters the model. Attention itself has no notion of order — without this, shuffling the input tokens would produce identical attention output.",
+  },
+  {
+    tag: "transformer/attention.py",
+    name: "Multi-Head Attention",
+    desc: "Every token looks at every earlier token (causal mask) and produces a weighted blend of their value vectors, computed independently across 4 heads of 16 dims each.",
+    inShape: "(2, 3, 64)",
+    outShape: "(2, 3, 64)",
+    outNote: "shape unchanged — information mixed ACROSS the seq_len axis",
+    code: `q,k,v = x @ W_q, x @ W_k, x @ W_v          <span class="cm"># each (2,3,64)</span>
+<span class="cm"># split into heads: (2,3,64) -> (2,3,4,16) -> swapaxes -> (2,4,3,16)</span>
+scores = q @ k.swapaxes(-1,-2)              <span class="cm"># (2,4,3,3) per-head scores</span>
+scores = mask(scores)                       <span class="cm"># zero out future positions</span>
+weights = softmax(scores / sqrt(<span class="num">16</span>))     <span class="cm"># (2,4,3,3), rows sum to 1</span>
+out = weights @ v                           <span class="cm"># (2,4,3,16)</span>
+<span class="cm"># merge heads back: swapaxes -> (2,3,4,16) -> reshape -> (2,3,64)</span>`,
+    examples: [
+      { label: "causal mask (seq_len=3)", val: "[[T,F,F],\n [T,T,F],\n [T,T,T]]" },
+      { label: "per-head shape", val: "(2, 4, 3, 3) — 4 independent 3×3 attention matrices" },
+      { label: "scale factor", val: "divide by sqrt(head_dim) = sqrt(16) = 4.0" },
+    ],
+    callout: "Token at position 0 can only attend to itself (row 0 of the mask is [T,F,F]). Token at position 2 can see all 3 positions. This causal structure is what makes autoregressive generation valid — no peeking at the future.",
+  },
+  {
+    tag: "transformer/gpt_block.py",
+    name: "Residual Add (post-attention)",
+    desc: "The attention output is added back to the block's original input — a 'shortcut' that lets gradients skip past the attention computation entirely during backprop.",
+    inShape: "(2, 3, 64) + (2, 3, 64)",
+    outShape: "(2, 3, 64)",
+    outNote: "simple elementwise addition — shapes must match exactly",
+    code: `shortcut = x            <span class="cm"># save input BEFORE norm/attention</span>
+x = self.norm1(x)
+x = self.attention(x, rngs)
+x = x + shortcut         <span class="cm"># residual connection</span>`,
+    examples: [
+      { label: "why it must match", val: "output_dim == embed_dim in config, so this add never shape-mismatches" },
+    ],
+    callout: "This is why CONFIG['output_dim'] == CONFIG['embed_dim'] — the residual add is a hard shape constraint, not a style choice.",
+  },
+  {
+    tag: "transformer/feed_forward.py",
+    name: "FeedForward",
+    desc: "Each token's vector (independently — no cross-token mixing here) is expanded to 4x width, passed through GELU, then projected back down.",
+    inShape: "(2, 3, 64)",
+    outShape: "(2, 3, 64)",
+    outNote: "shape round-trips through a wider hidden layer",
+    code: `x = self.linear1(x)   <span class="cm"># (2,3,64) -> (2,3,256)   4x expansion</span>
+x = nnx.gelu(x)        <span class="cm"># (2,3,256)               nonlinearity</span>
+x = self.linear2(x)    <span class="cm"># (2,3,256) -> (2,3,64)   project back down</span>`,
+    examples: [
+      { label: "hidden width", val: "256 = embed_dim(64) × scaling_factor(4)" },
+      { label: "mixes across", val: "the embed_dim axis only — NOT across tokens" },
+    ],
+    callout: "Attention mixes information ACROSS tokens (position axis). FeedForward transforms WITHIN each token (embed_dim axis). Together these two axes of mixing are the entire content of a transformer block.",
+  },
+  {
+    tag: "transformer/gpt_block.py",
+    name: "Residual Add (post-feedforward) → GPTBlock output",
+    desc: "Same residual pattern applied around the feedforward sublayer, completing one GPTBlock. This whole block repeats num_of_blocks=2 times.",
+    inShape: "(2, 3, 64) + (2, 3, 64)",
+    outShape: "(2, 3, 64)",
+    outNote: "identical shape to what the block received — stackable indefinitely",
+    code: `shortcut = x
+x = self.norm2(x)
+x = self.feed_forward(x)
+x = self.dropout(x, rngs=rngs)
+<span class="kw">return</span> x + shortcut     <span class="cm"># GPTBlock's final output</span>
+
+<span class="cm"># in Model.__call__:</span>
+<span class="kw">for</span> block <span class="kw">in</span> self.gpt_blocks:   <span class="cm"># runs this whole block twice</span>
+    x = block(x, rngs)`,
+    examples: [
+      { label: "why shape-stability matters", val: "since output shape == input shape, ANY number of blocks can be stacked without touching the rest of the architecture" },
+    ],
+    callout: "This shape invariant — (batch, seq_len, embed_dim) in, same shape out — is precisely why GPT-2 small (12 blocks) and GPT-3 (96 blocks) can share the exact same block code. Depth is just a for-loop.",
+  },
+  {
+    tag: "transformer/model.py",
+    name: "Final LayerNorm + Output Head",
+    desc: "After all blocks, one last normalization for stability, then a linear projection from embed_dim to vocab_size — turning each token's vector into a score for every possible next token.",
+    inShape: "(2, 3, 64)",
+    outShape: "(2, 3, 1000)",
+    outNote: "logits — one score per vocab entry, for every position",
+    code: `x = self.layer_norm(x)   <span class="cm"># (2,3,64) -> (2,3,64)</span>
+logits = self.linear(x)   <span class="cm"># (2,3,64) -> (2,3,1000)</span>
+<span class="cm"># W shape: (64, 1000) — one column of weights per vocab token</span>`,
+    examples: [
+      { label: "logits[0, 2, :]", val: "shape (1000,) — scores for token 0, position 2, over full vocab" },
+      { label: "to get probabilities", val: "softmax(logits[0, 2, :], axis=-1)" },
+      { label: "to generate", val: "argmax (greedy) or sample from softmax (temperature/top-k/top-p)" },
+    ],
+    callout: "This is the finish line of the forward pass. logits[b, t, :] predicts the token that comes AFTER position t. During training, this gets compared against the shifted target from SlidingWindowSampler via cross-entropy loss.",
+  },
+];
+
+let current = 0;
+
+function renderRail() {
+  const rail = document.getElementById('rail');
+  rail.innerHTML = '';
+  stages.forEach((s, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'stage' + (i === current ? ' active' : '');
+    btn.textContent = s.name;
+    btn.onclick = () => { current = i; render(); };
+    rail.appendChild(btn);
+    if (i < stages.length - 1) {
+      const conn = document.createElement('div');
+      conn.className = 'conn' + (i < current ? ' active' : '');
+      conn.textContent = '→';
+      rail.appendChild(conn);
+    }
+  });
+}
+
+function renderPanel() {
+  const s = stages[current];
+  const panel = document.getElementById('panel');
+
+  let shapeRow = '';
+  if (s.inShape) {
+    shapeRow += `<div class="shape-card in"><div class="sc-label">shape in</div><div class="sc-shape">${s.inShape}</div></div>`;
+  }
+  shapeRow += `<div class="shape-card out"><div class="sc-label">shape out</div><div class="sc-shape">${s.outShape}</div><div class="sc-note">${s.outNote}</div></div>`;
+
+  let examplesHtml = '';
+  if (s.examples && s.examples.length) {
+    examplesHtml = '<div class="example-grid">' + s.examples.map(e =>
+      `<div class="ex-box"><div class="ex-label">${e.label}</div><div class="ex-val">${e.val.replace(/\n/g, '<br>')}</div></div>`
+    ).join('') + '</div>';
+  }
+
+  let calloutHtml = '';
+  if (s.callout) {
+    calloutHtml = `<div class="callout"><div class="callout-label">Why this matters</div>${s.callout}</div>`;
+  }
+
+  panel.innerHTML = `
+    <span class="panel-tag">${s.tag}</span>
+    <h2>${s.name}</h2>
+    <p class="desc">${s.desc}</p>
+    <div class="shape-row">${shapeRow}</div>
+    <pre><code>${s.code}</code></pre>
+    ${examplesHtml}
+    ${calloutHtml}
+  `;
+}
+
+function renderDots() {
+  const dots = document.getElementById('dots');
+  dots.innerHTML = '';
+  stages.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === current ? ' active' : '');
+    dots.appendChild(d);
+  });
+}
+
+function render() {
+  renderRail();
+  renderPanel();
+  renderDots();
+  document.getElementById('prevBtn').disabled = current === 0;
+  document.getElementById('nextBtn').disabled = current === stages.length - 1;
+}
+
+document.getElementById('prevBtn').onclick = () => { if (current > 0) { current--; render(); } };
+document.getElementById('nextBtn').onclick = () => { if (current < stages.length - 1) { current++; render(); } };
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' && current < stages.length - 1) { current++; render(); }
+  if (e.key === 'ArrowLeft' && current > 0) { current--; render(); }
+});
+
+render();
+</script>
+</body>
+</html>

@@ -261,6 +261,19 @@
   <a href="#custom-pytree">Custom pytree</a>
   <a href="#grad-returns">grad return type</a>
   <a href="#wrt">What we differentiate</a>
+  <div class="nav-section">JAX Rules Reference</div>
+  <a href="#two-phase">Two-phase model</a>
+  <a href="#purity">Purity</a>
+  <a href="#control-flow">Control flow</a>
+  <a href="#lax-equivalents">lax equivalents</a>
+  <a href="#random-keys">Random keys</a>
+  <a href="#no-mutation">No mutation</a>
+  <a href="#int-grad">Integers break grad</a>
+  <div class="nav-section">Follow-up Q&amp;A</div>
+  <a href="#argnums-vs-inaxes">argnums vs in_axes</a>
+  <a href="#batch-vs-sample">Batch vs sample</a>
+  <a href="#pytree-two-leaves">grad on multi-leaf pytree</a>
+  <a href="#jit-retrace-pytree">Retracing on pytree/dtype change</a>
 </nav>
 
 <main>
@@ -503,6 +516,323 @@ grad(<span class="kw">lambda</span> p: jnp.sum(p.value ** <span class="num">2</s
       <div class="callout-label">General rule</div>
       <code>grad</code> differentiates w.r.t. all leaves of the input pytree. Aux is completely invisible to it.
     </div>
+  </section>
+
+  <!-- JAX RULES REFERENCE -->
+
+  <section id="two-phase">
+    <h2>JAX Rules Reference</h2>
+    <p class="lead">Expanded notes with worked examples, compiled while porting <code>batran-lib</code> to JAX/Flax NNX.</p>
+
+    <h3>The two-phase mental model</h3>
+    <p>Every jitted function runs in two distinct phases, and almost every JAX gotcha is a direct consequence of this split.</p>
+
+    <div class="flow">
+      <span class="label">call 1</span>  <span class="node">TRACE</span> (Python actually executes, building a graph) <span class="arrow">→</span> <span class="node">COMPILE</span> (XLA takes the graph)<br>
+      <span class="label">call 2+</span> <span class="node">COMPILED VERSION RUNS</span> — Python code is never executed again
+    </div>
+
+    <pre><code><span class="kw">import</span> jax
+
+<span class="kw">def</span> <span class="fn">f</span>(x):
+    print(<span class="st">"tracing!"</span>)   <span class="cm"># only prints on call 1</span>
+    <span class="kw">return</span> x * <span class="num">2</span>
+
+jf = jax.jit(f)
+jf(jnp.array(<span class="num">1.0</span>))   <span class="cm"># prints "tracing!", then returns 2.0</span>
+jf(jnp.array(<span class="num">2.0</span>))   <span class="cm"># prints nothing — runs compiled version, returns 4.0</span>
+jf(jnp.ones((<span class="num">3</span>,)))   <span class="cm"># NEW shape → retraces → prints "tracing!" again, returns [2,2,2]</span></code></pre>
+
+    <div class="callout insight">
+      <div class="callout-label">Key insight</div>
+      A jitted function is retraced (and recompiled) whenever it sees a new input <em>shape</em> or <em>dtype</em> — this is why "shapes must be static" is rule #1 for jit.
+    </div>
+  </section>
+
+  <section id="purity">
+    <h3>Purity — the rule everything derives from</h3>
+    <p>Functions passed to <code>jit</code>, <code>grad</code>, or <code>vmap</code> must be <strong>pure</strong>: same inputs always produce the same outputs, no mutation of inputs, no reading/writing global state, no side effects that matter to the result.</p>
+
+    <pre><code><span class="cm"># ❌ impure — reads global state</span>
+counter = <span class="num">0</span>
+<span class="kw">def</span> <span class="fn">f</span>(x):
+    <span class="kw">global</span> counter
+    counter += <span class="num">1</span>              <span class="cm"># side effect!</span>
+    <span class="kw">return</span> x + counter
+
+<span class="cm"># under jit, "counter" only increments during the TRACE call.</span>
+<span class="cm"># every subsequent call reuses the value baked in at trace time.</span>
+jf = jax.jit(f)
+jf(<span class="num">1.0</span>)  <span class="cm"># traces: counter becomes 1 → returns 2.0</span>
+jf(<span class="num">1.0</span>)  <span class="cm"># compiled version: "+counter" is frozen at 1 → returns 2.0 again (not 3.0!)</span></code></pre>
+
+    <div class="callout warning">
+      <div class="callout-label">Why this matters</div>
+      This is the classic silent bug: no error is raised, the function just quietly stops reflecting the global's real value after the first call.
+    </div>
+  </section>
+
+  <section id="control-flow">
+    <h3>Control flow — the most common gotcha</h3>
+    <p>Ask yourself: does this <code>if</code>/<code>while</code>/<code>for</code> depend on an <strong>array value</strong>, or on a <strong>shape / Python scalar</strong>?</p>
+
+    <table>
+      <tr><th>Condition depends on</th><th>Plain Python</th><th>JAX equivalent</th></tr>
+      <tr><td>Array value (e.g. <code>x[0] &gt; 0</code>)</td><td>❌ fails under jit/grad/vmap</td><td><code>jnp.where</code>, <code>lax.cond</code>, <code>lax.while_loop</code></td></tr>
+      <tr><td>Shape / dtype</td><td>✅ fine</td><td>plain Python fine (shapes are static)</td></tr>
+      <tr><td>Python int / bool (not a JAX array)</td><td>✅ fine</td><td>plain Python fine</td></tr>
+    </table>
+
+    <pre><code><span class="cm"># ❌ fails — comparison produces a traced bool, unknown at trace time</span>
+<span class="kw">def</span> <span class="fn">f</span>(x):
+    <span class="kw">if</span> x[<span class="num">0</span>] &gt; <span class="num">0</span>:
+        <span class="kw">return</span> x * <span class="num">2</span>
+    <span class="kw">return</span> x
+<span class="cm"># TracerBoolConversionError: attempted boolean conversion of traced array</span>
+
+<span class="cm"># ✅ element-wise branching with jnp.where</span>
+<span class="kw">def</span> <span class="fn">f</span>(x):
+    <span class="kw">return</span> jnp.where(x &gt; <span class="num">0</span>, x * <span class="num">2</span>, x)
+
+<span class="cm"># ✅ shape is known at trace time (it's Python metadata, not a value)</span>
+<span class="kw">def</span> <span class="fn">f</span>(x):
+    <span class="kw">if</span> x.shape[<span class="num">0</span>] &gt; <span class="num">4</span>:
+        <span class="kw">return</span> x[:<span class="num">4</span>]
+    <span class="kw">return</span> x</code></pre>
+
+    <div class="callout tip">
+      <div class="callout-label">How to remember it</div>
+      Shapes are <strong>compile-time</strong> facts — every trace of a given shape takes the same branch, so Python <code>if</code> is safe. Array <em>values</em> are only known at <strong>run time</strong> — Python can't branch on something that doesn't exist yet.
+    </div>
+  </section>
+
+  <section id="lax-equivalents">
+    <h3>lax control-flow equivalents</h3>
+    <pre><code><span class="kw">from</span> jax <span class="kw">import</span> lax
+
+<span class="cm"># lax.cond — if/else on an array value, both branches must return same shape/dtype</span>
+lax.cond(x &gt; <span class="num">0</span>,
+         <span class="kw">lambda</span> x: x * <span class="num">2</span>,   <span class="cm"># true_fn</span>
+         <span class="kw">lambda</span> x: x,       <span class="cm"># false_fn</span>
+         x)
+
+<span class="cm"># lax.while_loop — dynamic-length loop (number of iterations not known ahead)</span>
+<span class="kw">def</span> <span class="fn">cond_fn</span>(state):
+    i, x = state
+    <span class="kw">return</span> x &lt; <span class="num">100</span>          <span class="cm"># keep looping while x &lt; 100</span>
+
+<span class="kw">def</span> <span class="fn">body_fn</span>(state):
+    i, x = state
+    <span class="kw">return</span> (i + <span class="num">1</span>, x * <span class="num">2</span>)
+
+final_i, final_x = lax.while_loop(cond_fn, body_fn, (<span class="num">0</span>, <span class="num">1.0</span>))
+
+<span class="cm"># lax.fori_loop — for loop with known/dynamic bounds, simpler than while_loop</span>
+result = lax.fori_loop(<span class="num">0</span>, <span class="num">10</span>, <span class="kw">lambda</span> i, x: x + i, <span class="num">0</span>)
+
+<span class="cm"># lax.scan — for loop that ALSO collects outputs at each step (prefer over fori_loop)</span>
+<span class="kw">def</span> <span class="fn">step</span>(carry, x):
+    new_carry = carry + x
+    <span class="kw">return</span> new_carry, new_carry   <span class="cm"># (next carry, value to stack into output)</span>
+
+final_carry, all_outputs = lax.scan(step, <span class="num">0</span>, jnp.arange(<span class="num">5</span>))
+<span class="cm"># final_carry = 10 (0+0+1+2+3+4)</span>
+<span class="cm"># all_outputs = [0, 1, 3, 6, 10]  ← running sum at each step</span></code></pre>
+
+    <div class="callout insight">
+      <div class="callout-label">Why lax.scan over a Python for-loop</div>
+      A Python <code>for</code> loop over N steps unrolls into N copies of the op graph at trace time — slow to compile, huge graph. <code>lax.scan</code> compiles the loop body <strong>once</strong> and reuses it, exactly like a real loop.
+    </div>
+  </section>
+
+  <section id="random-keys">
+    <h3>Random keys — always explicit</h3>
+    <p>JAX has no hidden global random state (unlike <code>numpy.random</code>). Every call that needs randomness takes an explicit key, and a key must never be reused.</p>
+
+    <pre><code>key = jax.random.key(<span class="num">0</span>)
+key1, key2 = jax.random.split(key)   <span class="cm"># split BEFORE every use</span>
+
+a = jax.random.normal(key1, (<span class="num">3</span>,))
+b = jax.random.normal(key2, (<span class="num">3</span>,))
+<span class="cm"># a and b are different, independent random arrays</span>
+
+<span class="cm"># ❌ reusing the same key for two draws gives IDENTICAL output</span>
+a = jax.random.normal(key, (<span class="num">3</span>,))
+b = jax.random.normal(key, (<span class="num">3</span>,))
+<span class="cm"># a == b  — not what you want!</span></code></pre>
+
+    <div class="callout tip">
+      <div class="callout-label">In this codebase</div>
+      This is exactly what <code>nnx.Rngs(0)</code> manages for you — <code>rngs.params()</code> and <code>rngs.dropout()</code> each hand out a fresh split key automatically, so you never split by hand inside a Flax NNX module.
+    </div>
+  </section>
+
+  <section id="no-mutation">
+    <h3>No in-place mutation</h3>
+    <pre><code><span class="cm"># ❌ JAX arrays are immutable — no item assignment</span>
+x = jnp.array([<span class="num">1.</span>, <span class="num">2.</span>, <span class="num">3.</span>])
+x[<span class="num">0</span>] = <span class="num">9.</span>   <span class="cm"># TypeError: '&lt;class 'jaxlib.Array'&gt;' object does not support item assignment</span>
+
+<span class="cm"># ✅ .at[].set() returns a NEW array with the update applied</span>
+x = x.at[<span class="num">0</span>].set(<span class="num">9.</span>)        <span class="cm"># [9., 2., 3.]</span>
+x = x.at[<span class="num">1</span>].add(<span class="num">10.</span>)       <span class="cm"># [9., 12., 3.]</span>
+x = x.at[<span class="num">0</span>:<span class="num">2</span>].multiply(<span class="num">2.</span>)   <span class="cm"># [18., 24., 3.]</span>
+
+<span class="cm"># same idea for dicts of params — never mutate, always rebuild</span>
+params = {**params, <span class="st">"w"</span>: params[<span class="st">"w"</span>].at[<span class="num">0</span>].set(<span class="num">1.0</span>)}</code></pre>
+
+    <div class="callout insight">
+      <div class="callout-label">Why immutability</div>
+      Purity requires it — if arrays could mutate in place, the same input could silently produce different outputs across calls, and XLA couldn't safely reorder/fuse operations during compilation.
+    </div>
+  </section>
+
+  <section id="int-grad">
+    <h3>Integers will silently break grad</h3>
+    <pre><code><span class="cm"># ❌ integer array — grad returns zeros, NO error is raised</span>
+params = {<span class="st">"w"</span>: jnp.array([<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>])}       <span class="cm"># dtype: int32</span>
+grad_fn = jax.grad(<span class="kw">lambda</span> p: jnp.sum(p[<span class="st">"w"</span>].astype(jnp.float32) ** <span class="num">2</span>))
+<span class="cm"># works, but if you differentiate w.r.t. the int array directly, JAX either</span>
+<span class="cm"># errors or (in some versions) silently gives meaningless gradients</span>
+
+<span class="cm"># ✅ float array — differentiable, behaves as expected</span>
+params = {<span class="st">"w"</span>: jnp.array([<span class="num">1.0</span>, <span class="num">2.0</span>, <span class="num">3.0</span>])}   <span class="cm"># dtype: float32</span>
+
+<span class="cm"># always initialise params with float-producing constructors:</span>
+jnp.zeros(<span class="num">4</span>)                       <span class="cm"># float32 by default</span>
+jnp.ones(<span class="num">4</span>)                        <span class="cm"># float32 by default</span>
+jax.random.normal(key, (<span class="num">4</span>,))       <span class="cm"># float32 by default</span></code></pre>
+
+    <div class="callout warning">
+      <div class="callout-label">Where this bit us</div>
+      Token ids (<code>token_ids_batch</code> in <code>embedding.py</code>) are correctly kept as <strong>int</strong> — they're indices, never differentiated. Only the embedding <em>table</em> itself (<code>nnx.Param</code>, float) needs a gradient. Don't confuse "this array is used for indexing" with "this array needs to be float".
+    </div>
+  </section>
+
+  <section id="composition-recap">
+    <h3>Composition order — worked example</h3>
+    <pre><code><span class="cm"># standard order: grad innermost, vmap middle, jit outermost</span>
+loss_fn        = <span class="kw">lambda</span> params, x, y: jnp.sum((forward(params, x) - y) ** <span class="num">2</span>)
+grad_fn        = jax.grad(loss_fn, argnums=<span class="num">0</span>)                       <span class="cm"># single sample → grad</span>
+batched_grad   = jax.vmap(grad_fn, in_axes=(<span class="kw">None</span>, <span class="num">0</span>, <span class="num">0</span>))         <span class="cm"># whole batch</span>
+fast_batched   = jax.jit(batched_grad)                            <span class="cm"># compiled</span>
+
+<span class="cm"># jit(vmap(grad(fn))) compiles ONE fused graph for the whole batch.</span>
+<span class="cm"># vmap(jit(grad(fn))) would compile N separate calls — one per sample — much slower.</span></code></pre>
+  </section>
+
+  <!-- FOLLOW-UP Q&A -->
+
+  <section id="argnums-vs-inaxes">
+    <h2>Follow-up Q&amp;A</h2>
+    <p class="lead">Questions that came up re-reading this code after time away — kept close to how they were actually asked.</p>
+
+    <h3>argnums vs in_axes — what's the difference?</h3>
+    <pre><code><span class="kw">def</span> <span class="fn">loss</span>(x, target, params):
+    ...
+    <span class="kw">return</span> scalar_loss
+
+grad_fn       = jax.grad(loss, argnums=<span class="num">2</span>)
+batch_grad_fn = jax.vmap(grad_fn, in_axes=(<span class="num">0</span>, <span class="num">0</span>, <span class="kw">None</span>))</code></pre>
+    <p><code>argnums=2</code> tells <code>grad</code> which single argument to differentiate w.r.t., by position — here, <code>params</code> (index 2 of <code>x, target, params</code>). <code>grad_fn(x, target, params)</code> returns a gradient shaped like <code>params</code> only.</p>
+    <p><code>in_axes=(0, 0, None)</code> tells <code>vmap</code> how to treat <em>every</em> argument when batching, in the same order as <code>grad_fn</code>'s signature:</p>
+    <table>
+      <tr><th>Position</th><th>Value</th><th>Meaning</th></tr>
+      <tr><td><code>x</code></td><td><code>0</code></td><td>slice along axis 0 — one sample per vmap iteration</td></tr>
+      <tr><td><code>target</code></td><td><code>0</code></td><td>same — batch of targets</td></tr>
+      <tr><td><code>params</code></td><td><code>None</code></td><td>don't slice — reuse the identical params for every sample</td></tr>
+    </table>
+    <div class="callout insight">
+      <div class="callout-label">The core distinction</div>
+      <code>argnums</code> picks <strong>one</strong> argument to differentiate against — grad only ever computes derivatives of one thing. <code>in_axes</code> describes <strong>every</strong> argument's batching behavior, because vmap needs to know how to handle each one individually — batch it, or broadcast it unchanged.
+    </div>
+  </section>
+
+  <section id="batch-vs-sample">
+    <h3>Is "10" the batch size or the number of samples?</h3>
+    <p>They're the same thing — a "batch of 10" and "10 samples" mean identical: 10 separate training examples stacked into one array. The confusion comes from conflating <strong>sample</strong> (one data point, e.g. one <code>(x, y)</code> pair) with <strong>batch</strong> (a collection of samples processed together).</p>
+    <pre><code><span class="cm"># xs shape (10, 2)      → 10 samples, each a (2,) vector</span>
+<span class="cm"># targets shape (10, 2) → 10 samples, each a (2,) target vector</span>
+<span class="cm"># "batch size" = 10 = how many samples are grouped into this one array</span>
+
+<span class="cm"># what grad_fn expects (single sample):</span>
+grad_fn(x, target, params)          <span class="cm"># x: (2,), target: (2,)</span>
+
+<span class="cm"># what vmap(grad_fn, in_axes=(0,0,None)) does conceptually, for i in range(10):</span>
+grad_fn(xs[i], targets[i], params)  <span class="cm"># 10 separate calls, stacked into shape (10, ...)</span></code></pre>
+    <div class="callout tip">
+      <div class="callout-label">Why the mean afterward</div>
+      <code>vmap</code> doesn't literally write a Python loop — it vectorizes at the XLA level — but that's the right mental model: axis 0 is "which sample," and the output gradient gets a new leading axis of size 10, one gradient per sample, <em>not yet averaged</em>. That's why the training loop does <code>jax.tree.map(lambda g: jnp.mean(g, axis=0), grads)</code> right after — to collapse the per-sample axis back to a single gradient matching <code>params</code>' shape.
+    </div>
+  </section>
+
+  <section id="pytree-two-leaves">
+    <h3>grad on a custom pytree with two array fields — worked numbers</h3>
+    <p><code>Parameter</code> isn't a mathematical function, so it's never "differentiated" itself — <code>grad</code> only ever differentiates the arithmetic done on the arrays <em>inside</em> it. The class is just packaging; registration tells JAX where the real numbers live.</p>
+    <pre><code>@jax.tree_util.register_pytree_node_class
+<span class="kw">class</span> <span class="fn">Parameter</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, value, momentum, name, frozen=<span class="kw">False</span>):
+        self.value = value        <span class="cm"># array → leaf</span>
+        self.momentum = momentum  <span class="cm"># array → leaf</span>
+        self.name = name          <span class="cm"># string → aux</span>
+        self.frozen = frozen      <span class="cm"># bool → aux</span>
+
+    <span class="kw">def</span> <span class="fn">tree_flatten</span>(self):
+        <span class="kw">return</span> (self.value, self.momentum), (self.name, self.frozen)
+
+    @<span class="fn">classmethod</span>
+    <span class="kw">def</span> <span class="fn">tree_unflatten</span>(cls, aux, leaves):
+        name, frozen = aux
+        value, momentum = leaves
+        <span class="kw">return</span> cls(value, momentum, name, frozen)
+
+p = Parameter(value=jnp.array([<span class="num">1.0</span>, <span class="num">2.0</span>]), momentum=jnp.array([<span class="num">3.0</span>, <span class="num">4.0</span>]), name=<span class="st">"w1"</span>)
+
+<span class="kw">def</span> <span class="fn">f</span>(p):
+    <span class="kw">return</span> jnp.sum(p.value ** <span class="num">2</span>) + jnp.sum(p.momentum ** <span class="num">3</span>)
+
+grad_p = jax.grad(f)(p)</code></pre>
+    <p>Step by step: <code>tree_flatten</code> gives <code>leaves = ([1.0,2.0], [3.0,4.0])</code>, <code>aux = ("w1", False)</code>. <code>grad</code> sees <code>f</code> as a plain function of two arrays and differentiates each leaf independently:</p>
+    <pre><code>∂f/∂value    = <span class="num">2</span> * value    = <span class="num">2</span> * [<span class="num">1.0</span>, <span class="num">2.0</span>] = [<span class="num">2.0</span>, <span class="num">4.0</span>]
+∂f/∂momentum = <span class="num">3</span> * momentum² = <span class="num">3</span> * [<span class="num">9.0</span>, <span class="num">16.0</span>] = [<span class="num">27.0</span>, <span class="num">48.0</span>]
+
+<span class="cm"># tree_unflatten rebuilds a Parameter, reusing the SAME aux from step 1:</span>
+grad_p.value    == [<span class="num">2.0</span>, <span class="num">4.0</span>]     <span class="cm"># ∂f/∂value</span>
+grad_p.momentum == [<span class="num">27.0</span>, <span class="num">48.0</span>]   <span class="cm"># ∂f/∂momentum</span>
+grad_p.name     == <span class="st">"w1"</span>          <span class="cm"># unchanged — never touched by grad</span>
+grad_p.frozen   == <span class="kw">False</span>          <span class="cm"># unchanged — never touched by grad</span></code></pre>
+    <div class="callout warning">
+      <div class="callout-label">If you tried to differentiate through aux</div>
+      Calling something like <code>len(p.name)</code> inside <code>f</code> would fail or be silently meaningless — <code>grad</code> has no mechanism to differentiate through a string, because strings never become leaves. Only what <code>tree_flatten</code> puts in <code>leaves</code> is visible to differentiation.
+    </div>
+  </section>
+
+  <section id="jit-retrace-pytree">
+    <h3>Retracing triggers: shape, dtype, AND pytree structure</h3>
+    <p>"Shapes must be static" really means: across repeated calls to the same jitted function, the shape/dtype/pytree-structure of the arguments must stay identical, or you pay a fresh trace+compile — silently, no error, just slower.</p>
+    <pre><code>@jax.jit
+<span class="kw">def</span> <span class="fn">f</span>(x):
+    <span class="kw">return</span> x * <span class="num">2</span>
+
+f(jnp.ones((<span class="num">3</span>,)))      <span class="cm"># trace #1 — compiles for shape (3,), dtype float32</span>
+f(jnp.ones((<span class="num">3</span>,)))      <span class="cm"># reuses compiled version — same shape/dtype</span>
+f(jnp.ones((<span class="num">5</span>,)))      <span class="cm"># trace #2 — NEW shape (5,) → recompiles</span>
+f(jnp.ones((<span class="num">3</span>,), dtype=jnp.int32))  <span class="cm"># trace #3 — same shape, different DTYPE → recompiles</span>
+
+<span class="cm"># pytree inputs: JAX checks shape/dtype of EVERY leaf, plus the pytree structure itself</span>
+f({<span class="st">"a"</span>: jnp.ones((<span class="num">3</span>,)), <span class="st">"b"</span>: jnp.ones((<span class="num">2</span>,))})  <span class="cm"># trace #1</span>
+f({<span class="st">"a"</span>: jnp.ones((<span class="num">3</span>,)), <span class="st">"b"</span>: jnp.ones((<span class="num">2</span>,))})  <span class="cm"># same structure+shapes → reuses</span>
+f({<span class="st">"a"</span>: jnp.ones((<span class="num">3</span>,))})                        <span class="cm"># DIFFERENT structure (missing "b") → recompiles</span></code></pre>
+    <div class="callout warning">
+      <div class="callout-label">jit traces your Python code as-written — it doesn't fix bugs</div>
+      <code>f({"a": ..., "b": ...})</code> with <code>return x * 2</code> doesn't "recompile weirdly" — it raises <code>TypeError: unsupported operand type(s) for *: 'dict' and 'int'</code>, because Python dicts don't support multiplication. Tracing just runs your code once with tracers standing in for arrays; it never rewrites the logic. To operate on every leaf of a pytree, use <code>jax.tree.map</code>:
+    </div>
+    <pre><code><span class="kw">def</span> <span class="fn">f</span>(x):
+    <span class="kw">return</span> jax.tree.map(<span class="kw">lambda</span> leaf: leaf * <span class="num">2</span>, x)
+
+f({<span class="st">"a"</span>: jnp.ones((<span class="num">3</span>,)), <span class="st">"b"</span>: jnp.ones((<span class="num">2</span>,))})
+<span class="cm"># {"a": array([2.,2.,2.]), "b": array([2.,2.])}</span></code></pre>
+    <p>This is exactly why in <code>SlidingWindowSampler</code>, every batch yielded has the same <code>(batch_size, seq_len)</code> shape — that consistency is what lets the training step get jitted once and reused for every batch, instead of recompiling every iteration.</p>
   </section>
 
 </main>

@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPT Architecture Walkthrough</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e0f;
+    --surface: #161618;
+    --surface2: #1e1e21;
+    --border: #2a2a2e;
+    --border2: #38383e;
+    --text: #e8e6e0;
+    --muted: #888580;
+    --accent: #c9a96e;
+    --accent2: #7eb8a4;
+    --accent3: #9b8fd4;
+    --danger: #e07070;
+    --code-bg: #131315;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 300;
+    line-height: 1.75;
+    font-size: 16px;
+  }
+  .shell { display: flex; min-height: 100vh; }
+  nav {
+    width: 240px;
+    min-width: 240px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 0.5px solid var(--border);
+    padding: 2rem 0;
+    background: var(--surface);
+  }
+  main { flex: 1; max-width: 820px; padding: 3rem 3.5rem; }
+  .nav-logo {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .12em;
+    color: var(--accent);
+    padding: 0 1.5rem 1.5rem;
+    border-bottom: 0.5px solid var(--border);
+    margin-bottom: 1.5rem;
+    text-transform: uppercase;
+  }
+  .nav-section {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: .5rem 1.5rem .25rem;
+    margin-top: .75rem;
+  }
+  nav a {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    color: var(--muted);
+    text-decoration: none;
+    padding: .35rem 1.5rem;
+    border-left: 2px solid transparent;
+    transition: all .15s;
+  }
+  nav a:hover { color: var(--text); border-left-color: var(--border2); }
+  nav a.active { color: var(--accent); border-left-color: var(--accent); }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-size: 2.4rem;
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--text);
+    margin-bottom: .5rem;
+  }
+  h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: var(--text);
+    margin: 3rem 0 1rem;
+    padding-top: 3rem;
+    border-top: 0.5px solid var(--border);
+  }
+  h2:first-of-type { border-top: none; padding-top: 0; margin-top: 1.5rem; }
+  h3 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    margin: 2rem 0 .75rem;
+  }
+  p { margin-bottom: 1rem; color: var(--text); }
+  .lead { font-size: 1.05rem; color: var(--muted); margin-bottom: 2rem; line-height: 1.8; }
+  .file-tag {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--bg);
+    background: var(--accent);
+    padding: .15rem .6rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+  }
+  code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    background: var(--code-bg);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+    border: 0.5px solid var(--border);
+  }
+  pre {
+    background: var(--code-bg);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+  }
+  pre code { background: none; border: none; padding: 0; color: #c9c5bc; font-size: 12.5px; line-height: 1.75; }
+  .kw { color: #9b8fd4; }
+  .fn { color: #7eb8a4; }
+  .st { color: #c9a96e; }
+  .cm { color: #555450; font-style: italic; }
+  .num { color: #e07070; }
+  .cls { color: #e8c07d; }
+  .callout {
+    border-left: 2px solid var(--border2);
+    padding: .75rem 1.25rem;
+    margin: 1.25rem 0;
+    border-radius: 0 6px 6px 0;
+    background: var(--surface2);
+    font-size: 14.5px;
+    line-height: 1.7;
+  }
+  .callout.insight { border-left-color: var(--accent); }
+  .callout.warning { border-left-color: var(--danger); }
+  .callout.tip { border-left-color: var(--accent2); }
+  .callout-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    margin-bottom: .4rem;
+  }
+  .callout.insight .callout-label { color: var(--accent); }
+  .callout.warning .callout-label { color: var(--danger); }
+  .callout.tip .callout-label { color: var(--accent2); }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 13.5px; }
+  th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+    padding: .6rem 1rem;
+    border-bottom: 0.5px solid var(--border2);
+  }
+  td { padding: .6rem 1rem; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 11.5px; }
+  .hero { padding: 2rem 0 1rem; margin-bottom: 1rem; }
+  .hero-meta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1rem;
+  }
+  .flow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    line-height: 2;
+    color: var(--muted);
+    padding: 1rem 1.5rem;
+    background: var(--code-bg);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    margin: 1rem 0 1.5rem;
+  }
+  .flow .node { color: var(--text); }
+  .flow .arrow { color: var(--accent); }
+  .flow .label { color: var(--accent3); }
+  hr { border: none; border-top: 0.5px solid var(--border); margin: 2.5rem 0; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="shell">
+<nav>
+  <div class="nav-logo">GPT Architecture</div>
+  <div class="nav-section">Overview</div>
+  <a href="#overview">Big picture</a>
+  <a href="#config">Config</a>
+  <div class="nav-section">Components</div>
+  <a href="#embedding">Embedding</a>
+  <a href="#attention">Attention</a>
+  <a href="#mha">Multi-Head Attention</a>
+  <a href="#layernorm">LayerNorm</a>
+  <a href="#feedforward">FeedForward</a>
+  <a href="#gptblock">GPTBlock</a>
+  <a href="#model">Model</a>
+  <div class="nav-section">Data</div>
+  <a href="#tokenizer">BPE Tokenizer</a>
+  <a href="#sampler">Sliding Window Sampler</a>
+</nav>
+<main>
+
+  <div class="hero">
+    <div class="hero-meta">jax-learn — transformer/</div>
+    <h1>GPT Architecture Walkthrough</h1>
+    <p class="lead">Every component you built, in the order data flows through them, with the actual code and why each piece exists.</p>
+  </div>
+
+  <section id="overview">
+    <h2>Big picture</h2>
+    <p>A GPT model turns a sequence of token ids into a probability distribution over the next token, for every position in the sequence simultaneously. The path:</p>
+    <div class="flow">
+      <span class="node">token_ids (b, seq_len)</span><br>
+      <span class="arrow">↓ Embedding</span> — look up + add position<br>
+      <span class="node">x (b, seq_len, embed_dim)</span><br>
+      <span class="arrow">↓ GPTBlock × N</span> — attention + feedforward, each with residuals<br>
+      <span class="node">x (b, seq_len, embed_dim)</span> <span class="cm">← same shape the whole time</span><br>
+      <span class="arrow">↓ LayerNorm + Linear</span><br>
+      <span class="node">logits (b, seq_len, vocab_size)</span>
+    </div>
+    <div class="callout insight">
+      <div class="callout-label">The one shape invariant to hold onto</div>
+      From the moment embeddings are produced until the final output head, every intermediate tensor is <code>(batch, seq_len, embed_dim)</code>. Attention mixes information <em>across</em> the seq_len axis; feedforward transforms <em>within</em> the embed_dim axis. Nothing changes the shape until the very last linear layer projects <code>embed_dim → vocab_size</code>.
+    </div>
+  </section>
+
+  <section id="config">
+    <h3>Config used across the pipeline</h3>
+    <pre><code>CONFIG = {
+    <span class="st">'vocab_size'</span>:    <span class="num">1000</span>,   <span class="cm"># size of output distribution — from BPE tokenizer</span>
+    <span class="st">'embed_dim'</span>:     <span class="num">64</span>,     <span class="cm"># dimensionality of each token's vector</span>
+    <span class="st">'max_seq_len'</span>:   <span class="num">256</span>,    <span class="cm"># longest sequence positional embeddings support</span>
+    <span class="st">'num_heads'</span>:     <span class="num">4</span>,      <span class="cm"># attention heads (64 / 4 = 16 dims per head)</span>
+    <span class="st">'input_dim'</span>:     <span class="num">64</span>,     <span class="cm"># must equal embed_dim — attention reads embeddings directly</span>
+    <span class="st">'output_dim'</span>:    <span class="num">64</span>,     <span class="cm"># must equal embed_dim — so residual add (x + shortcut) works</span>
+    <span class="st">'scaling_factor'</span>: <span class="num">4</span>,     <span class="cm"># FeedForward hidden layer is 4x wider than embed_dim</span>
+    <span class="st">'dropout'</span>:       <span class="num">0.1</span>,    <span class="cm"># regularization inside GPTBlock</span>
+    <span class="st">'eps'</span>:           <span class="num">1e-5</span>,   <span class="cm"># LayerNorm numerical stability constant</span>
+    <span class="st">'num_of_blocks'</span>: <span class="num">2</span>,      <span class="cm"># how many GPTBlocks stacked</span>
+}</code></pre>
+    <div class="callout warning">
+      <div class="callout-label">Why input_dim == output_dim matters</div>
+      <code>GPTBlock</code> does <code>x = x + shortcut</code> after both attention and feedforward. That elementwise add requires the output shape to exactly match the input shape — so <code>output_dim</code> must equal <code>embed_dim</code>. If you ever add a projection that changes width mid-block, you'd need to project the shortcut too.
+    </div>
+  </section>
+
+  <section id="embedding">
+    <h2>1. Embedding</h2>
+    <span class="file-tag">transformer/embedding.py</span>
+    <p>Converts integer token ids into learned vectors, and adds a learned vector per position so the model can tell token order apart (attention itself has no sense of order).</p>
+    <pre><code><span class="kw">class</span> <span class="cls">Embedding</span>(nnx.Module):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, vocab_size, dimensions, max_seq_len, rngs: nnx.Rngs):
+        self.embed = nnx.Param(
+            jax.random.normal(rngs.params(),(vocab_size,dimensions))*<span class="num">0.02</span>
+        )
+        self.positional = nnx.Param(
+            jax.random.normal(rngs.params(),(max_seq_len,dimensions))*<span class="num">0.02</span>
+        )
+
+    <span class="kw">def</span> <span class="fn">__call__</span>(self, token_ids_batch):
+        embeddings = self.embed[token_ids_batch]
+        positions = token_ids_batch.shape[<span class="num">1</span>]
+        positional_encodings = self.positional[:positions]
+        <span class="kw">return</span> embeddings + positional_encodings</code></pre>
+
+    <h3>Shape trace</h3>
+    <table>
+      <tr><th>Step</th><th>Expression</th><th>Shape</th></tr>
+      <tr><td>Input</td><td><code>token_ids_batch</code></td><td><code>(2, 3)</code> — 2 sequences, 3 tokens each</td></tr>
+      <tr><td>Table lookup</td><td><code>self.embed[token_ids_batch]</code></td><td><code>(2, 3, 64)</code> — fancy indexing pulls one row per token id</td></tr>
+      <tr><td>Position slice</td><td><code>self.positional[:3]</code></td><td><code>(3, 64)</code> — first 3 rows of the position table</td></tr>
+      <tr><td>Output</td><td><code>embeddings + positional_encodings</code></td><td><code>(2, 3, 64)</code> — broadcasts <code>(3,64)</code> across the batch dim</td></tr>
+    </table>
+    <div class="callout tip">
+      <div class="callout-label">Why *0.02</div>
+      Scaling the random init down keeps embeddings small at the start of training — large initial values make the loss landscape harder to optimize early on. This is a standard GPT-2-style initialization trick.
+    </div>
+    <div class="callout insight">
+      <div class="callout-label">Learned vs. sinusoidal (Phase 3 TODO)</div>
+      This uses a <em>learned</em> positional table — a parameter that gets trained like any other. Modern models (LLaMA, GLM) use RoPE instead, which rotates query/key vectors based on position rather than adding a learned vector. RoPE generalizes to sequence lengths never seen in training; learned embeddings don't (you can't index past <code>max_seq_len</code>).
+    </div>
+  </section>
+
+  <section id="attention">
+    <h2>2. Scaled Dot-Product Attention</h2>
+    <span class="file-tag">transformer/attention.py</span>
+    <p>For every token, decide how much to "attend to" every other token (including itself), then take a weighted average of their value vectors. The causal mask prevents a token from attending to tokens that come after it.</p>
+    <pre><code><span class="kw">class</span> <span class="cls">ScaledDotProdAttention</span>(nnx.Module):
+
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, input_dim, output_dim, rngs: nnx.Rngs):
+        self.q = nnx.Param(jax.random.normal(rngs.params(),(input_dim,output_dim)))
+        self.k = nnx.Param(jax.random.normal(rngs.params(),(input_dim,output_dim)))
+        self.v = nnx.Param(jax.random.normal(rngs.params(),(input_dim,output_dim)))
+        self.dropout = nnx.Dropout(<span class="num">0.2</span>)
+
+    <span class="kw">def</span> <span class="fn">__call__</span>(self, embeddings, rngs: nnx.Rngs):
+        query = embeddings @ self.q.value
+        key = embeddings @ self.k.value
+        value = embeddings @ self.v.value
+        attention_scores = query @ jnp.swapaxes(key, -<span class="num">1</span>, -<span class="num">2</span>)
+        mask = jnp.tril(jnp.ones((attention_scores.shape[-<span class="num">1</span>],attention_scores.shape[-<span class="num">1</span>]), dtype=bool))
+        attention_scores = jnp.where(mask,attention_scores,-jnp.inf)
+        attention_weights = nnx.softmax(attention_scores/key.shape[-<span class="num">1</span>]**<span class="num">0.5</span>,axis=-<span class="num">1</span>)
+        attention_weights = self.dropout(attention_weights, rngs=rngs)
+        attention = attention_weights @ value
+        <span class="kw">return</span> attention</code></pre>
+
+    <h3>Shape trace (batch=2, seq_len=3, embed_dim=64)</h3>
+    <table>
+      <tr><th>Step</th><th>Expression</th><th>Shape</th></tr>
+      <tr><td>Input</td><td><code>embeddings</code></td><td><code>(2, 3, 64)</code></td></tr>
+      <tr><td>Project</td><td><code>query, key, value</code></td><td><code>(2, 3, 64)</code> each — <code>@ (64,64)</code> keeps last dim same</td></tr>
+      <tr><td>Scores</td><td><code>query @ swapaxes(key,-1,-2)</code></td><td><code>(2, 3, 3)</code> — every token's score against every other token</td></tr>
+      <tr><td>Mask + softmax</td><td><code>attention_weights</code></td><td><code>(2, 3, 3)</code> — rows sum to 1 along axis=-1</td></tr>
+      <tr><td>Weighted sum</td><td><code>attention_weights @ value</code></td><td><code>(2, 3, 64)</code> — back to embedding shape</td></tr>
+    </table>
+
+    <div class="callout insight">
+      <div class="callout-label">Why swapaxes(-1,-2) instead of .T</div>
+      <code>key</code> is <code>(2, 3, 64)</code> — a batch of matrices. <code>.T</code> reverses <em>all</em> axes, giving <code>(64, 3, 2)</code>, which is wrong. <code>jnp.swapaxes(key, -1, -2)</code> swaps only the last two axes → <code>(2, 64, 3)</code>, so <code>(2,3,64) @ (2,64,3) → (2,3,3)</code> — a proper batched matmul.
+    </div>
+
+    <h3>The causal mask, concretely</h3>
+    <pre><code><span class="cm"># for seq_len=3:</span>
+mask = jnp.tril(jnp.ones((<span class="num">3</span>,<span class="num">3</span>), dtype=bool))
+<span class="cm"># [[ True, False, False],</span>
+<span class="cm">#  [ True,  True, False],</span>
+<span class="cm">#  [ True,  True,  True]]</span>
+
+<span class="cm"># row i = "what token i is allowed to see": only positions <= i</span>
+<span class="cm"># jnp.where(mask, scores, -inf) sets disallowed positions to -inf</span>
+<span class="cm"># softmax(-inf) = 0 → those positions get exactly zero attention weight</span></code></pre>
+
+    <div class="callout warning">
+      <div class="callout-label">Why divide by key.shape[-1]**0.5</div>
+      Without scaling, dot products grow with the dimensionality (more terms summed = larger variance), pushing softmax into regions with near-zero gradients. Dividing by <code>sqrt(head_dim)</code> keeps the scores at a consistent scale regardless of dimension — this is the "scaled" in "scaled dot-product attention".
+    </div>
+
+    <h3>Why attention_weights @ value, not value @ attention_weights</h3>
+    <p>Matrix multiply only contracts the <em>last axis</em> of the left operand with the <em>second-to-last axis</em> of the right operand. Shapes: <code>attention_weights</code> is <code>(..., seq, seq)</code>, <code>value</code> is <code>(..., seq, head_dim)</code>.</p>
+    <pre><code><span class="cm"># attention_weights @ value → (..., seq, seq) @ (..., seq, head_dim) = (..., seq, head_dim)</span>
+<span class="cm"># row i of the result: output[i,:] = sum_j weights[i,j] * value[j,:]</span>
+<span class="cm">#   "token i's output = weighted average of every token j's value, weighted by</span>
+<span class="cm">#    how much token i attends to token j" — row i of weights holds query i's weights</span>
+
+<span class="cm"># tiny numeric example, seq_len=2, head_dim=1:</span>
+attention_weights = [[<span class="num">0.7</span>, <span class="num">0.3</span>],     value = [[<span class="num">10</span>],
+                      [<span class="num">0.2</span>, <span class="num">0.8</span>]]              [<span class="num">20</span>]]
+
+<span class="cm"># row 0: 0.7*10 + 0.3*20 = 13   ← token 0: mostly its own value, a bit of token 1's</span>
+<span class="cm"># row 1: 0.2*10 + 0.8*20 = 18   ← token 1: mostly its own value</span></code></pre>
+    <div class="callout warning">
+      <div class="callout-label">Why the reverse order breaks</div>
+      <code>value @ attention_weights</code> gives <code>(..., seq, head_dim) @ (..., seq, seq)</code> — invalid unless <code>head_dim == seq</code>, since the inner dimensions (<code>head_dim</code> and <code>seq</code>) must match. Even in that degenerate case, it would contract over <code>head_dim</code> — mixing feature dimensions weighted by attention scores — instead of mixing <em>tokens</em> weighted by attention scores, which is the entire point of attention.
+    </div>
+  </section>
+
+  <section id="mha">
+    <h2>3. Multi-Head Attention</h2>
+    <span class="file-tag">transformer/attention.py</span>
+    <p>Same idea as above, but split the embedding into several smaller "heads" that each learn to attend to different kinds of relationships (e.g. one head might track syntax, another might track long-range topic), then concatenate the results.</p>
+    <pre><code><span class="kw">class</span> <span class="cls">MultiHeadAttention</span>(nnx.Module):
+
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, input_dim, output_dim, num_heads, rngs: nnx.Rngs):
+        <span class="kw">assert</span> output_dim % num_heads == <span class="num">0</span>, <span class="st">"output_dim must be divisible by num_heads"</span>
+        self.num_heads = num_heads
+        self.head_dim = output_dim//num_heads
+        self.q = nnx.Param(jax.random.normal(rngs.params(),(input_dim,output_dim)))
+        self.k = nnx.Param(jax.random.normal(rngs.params(),(input_dim,output_dim)))
+        self.v = nnx.Param(jax.random.normal(rngs.params(),(input_dim,output_dim)))
+        self.dropout = nnx.Dropout(<span class="num">0.2</span>)
+
+    <span class="kw">def</span> <span class="fn">__call__</span>(self, embeddings, rngs: nnx.Rngs):
+        b, tokens, _ = embeddings.shape
+        query = embeddings @ self.q.value
+        key = embeddings @ self.k.value
+        value = embeddings @ self.v.value
+
+        query = jnp.reshape(query, (b,tokens,self.num_heads,self.head_dim)).swapaxes(<span class="num">1</span>,<span class="num">2</span>)
+        key = jnp.reshape(key, (b,tokens,self.num_heads,self.head_dim)).swapaxes(<span class="num">1</span>,<span class="num">2</span>)
+        value = jnp.reshape(value, (b,tokens,self.num_heads,self.head_dim)).swapaxes(<span class="num">1</span>,<span class="num">2</span>)
+
+        attention_scores = query @ jnp.swapaxes(key, -<span class="num">1</span>, -<span class="num">2</span>)
+        mask = jnp.tril(jnp.ones((attention_scores.shape[-<span class="num">1</span>],attention_scores.shape[-<span class="num">1</span>]), dtype=bool))
+        attention_scores = jnp.where(mask,attention_scores,-jnp.inf)
+        attention_weights = nnx.softmax(attention_scores/key.shape[-<span class="num">1</span>]**<span class="num">0.5</span>,axis=-<span class="num">1</span>)
+        attention_weights = self.dropout(attention_weights, rngs=rngs)
+        attention = attention_weights @ value
+        attention = jnp.swapaxes(attention, <span class="num">1</span>, <span class="num">2</span>)
+        <span class="kw">return</span> jnp.reshape(attention, (b,tokens, self.num_heads*self.head_dim))</code></pre>
+
+    <h3>Shape trace (batch=2, seq_len=3, embed_dim=64, num_heads=4, head_dim=16)</h3>
+    <table>
+      <tr><th>Step</th><th>Shape</th><th>What happened</th></tr>
+      <tr><td>After projection</td><td><code>(2, 3, 64)</code></td><td>same as single-head so far</td></tr>
+      <tr><td>Reshape</td><td><code>(2, 3, 4, 16)</code></td><td>split 64 into 4 heads of 16 each</td></tr>
+      <tr><td>swapaxes(1,2)</td><td><code>(2, 4, 3, 16)</code></td><td>bring heads next to batch so each head attends independently</td></tr>
+      <tr><td>Attention scores</td><td><code>(2, 4, 3, 3)</code></td><td>one 3×3 attention matrix <em>per head</em></td></tr>
+      <tr><td>Weighted sum</td><td><code>(2, 4, 3, 16)</code></td><td>each head produces its own 16-dim output per token</td></tr>
+      <tr><td>swapaxes(1,2) back</td><td><code>(2, 3, 4, 16)</code></td><td>heads next to their own dims again</td></tr>
+      <tr><td>Final reshape</td><td><code>(2, 3, 64)</code></td><td>concatenate heads back into one embedding vector</td></tr>
+    </table>
+
+    <div class="callout insight">
+      <div class="callout-label">Why swapaxes(1,2) before attention</div>
+      Matrix multiply (<code>@</code>) always operates on the <em>last two</em> axes and treats everything before that as independent batch dims. Moving heads to axis 1 (next to batch) makes <code>(b, heads, tokens, head_dim)</code> so that <code>query @ key.T</code> computes attention <strong>within each head separately</strong> — heads never see each other's data, which is the whole point of splitting them.
+    </div>
+
+    <h3>reshape then swapaxes — why both steps, and in that order</h3>
+    <p>Two separate jobs: reshape splits the embedding into heads, swapaxes repositions them so matmul batches over heads correctly.</p>
+    <pre><code><span class="cm"># step 1 — reshape doesn't move data, just reinterprets the last axis (64) as (4, 16).</span>
+<span class="cm"># arrays are row-major, so this correctly groups the first 16 numbers as head 0, next 16 as head 1...</span>
+query[b, t, :]  <span class="cm"># shape (64,)</span>
+  = [ q0_0...q0_15 | q1_0...q1_15 | q2_0...q2_15 | q3_0...q3_15 ]
+         head 0          head 1         head 2         head 3
+
+reshape → query[b, t, h, :]  <span class="cm"># shape (4, 16)</span>
+  query[b, t, <span class="num">0</span>, :] = q0_0...q0_15   <span class="cm"># head 0's slice</span>
+<span class="cm"># after reshape: (2, 3, 4, 16) — axis order (batch, tokens, heads, head_dim)</span>
+
+<span class="cm"># step 2 — swapaxes(1,2) permutes axes (still no data movement):</span>
+<span class="cm"># (2, 3, 4, 16) → (2, 4, 3, 16) — axis order (batch, heads, tokens, head_dim)</span></code></pre>
+    <div class="callout warning">
+      <div class="callout-label">Why the swap is required</div>
+      Before swap, last two axes are <code>(heads, head_dim)</code> — a matmul there would multiply across heads and head_dim, mixing different heads' features together, which is nonsense. After swap, last two axes are <code>(tokens, head_dim)</code> with <code>(batch, heads)</code> as independent loop dimensions, so <code>query @ key.swapaxes(-1,-2)</code> gives <code>(2, 4, 3, 3)</code> — one clean attention matrix per batch item <em>per head</em>, fully independent. Skipping the swap would blend information across heads before the attention weighting even happens — defeating the entire purpose of splitting heads.
+    </div>
+    <div class="callout tip">
+      <div class="callout-label">Concrete example</div>
+      Say token 0 is "cat". Head 1 might learn to attend strongly to nearby adjectives ("the ___"), head 2 might learn to attend to the verb governing it ("___ sat"). Splitting into heads lets these different relationship types be learned in parallel subspaces instead of forcing one attention pattern to capture everything.
+    </div>
+  </section>
+
+  <section id="layernorm">
+    <h2>4. LayerNorm</h2>
+    <span class="file-tag">transformer/layer_norm.py</span>
+    <p>Normalizes each token's vector independently (across its own <code>embed_dim</code> axis) to zero mean and unit variance, then applies a learned scale and shift. Stabilizes training by keeping activation magnitudes consistent as they flow through many stacked blocks.</p>
+    <pre><code><span class="kw">class</span> <span class="cls">LayerNorm</span>(nnx.Module):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self,eps,embed_dim):
+        self.eps = eps
+        self.scale = nnx.Param(jnp.ones(embed_dim))
+        self.shift = nnx.Param(jnp.zeros(embed_dim))
+
+    <span class="kw">def</span> <span class="fn">__call__</span>(self, embeddings):
+        mean = jnp.mean(embeddings, axis=-<span class="num">1</span>, keepdims=<span class="kw">True</span>)
+        var = jnp.var(embeddings, axis=-<span class="num">1</span>, keepdims=<span class="kw">True</span>)
+        norm = (embeddings-mean)/jnp.sqrt(var+self.eps)
+        <span class="kw">return</span> self.scale.value*norm + self.shift.value</code></pre>
+
+    <h3>Worked example — one token, embed_dim=4</h3>
+    <pre><code>x = [<span class="num">2.0</span>, <span class="num">4.0</span>, <span class="num">4.0</span>, <span class="num">6.0</span>]
+
+mean = (<span class="num">2</span>+<span class="num">4</span>+<span class="num">4</span>+<span class="num">6</span>)/<span class="num">4</span> = <span class="num">4.0</span>
+var  = ((<span class="num">2</span>-<span class="num">4</span>)² + (<span class="num">4</span>-<span class="num">4</span>)² + (<span class="num">4</span>-<span class="num">4</span>)² + (<span class="num">6</span>-<span class="num">4</span>)²) / <span class="num">4</span> = <span class="num">2.0</span>
+norm = (x - <span class="num">4.0</span>) / sqrt(<span class="num">2.0</span> + <span class="num">1e-5</span>)
+     ≈ [-<span class="num">1.414</span>, <span class="num">0.0</span>, <span class="num">0.0</span>, <span class="num">1.414</span>]
+
+<span class="cm"># then scale (init=ones) and shift (init=zeros) are applied —</span>
+<span class="cm"># at initialization this is a no-op, but they become learned during training</span></code></pre>
+
+    <div class="callout insight">
+      <div class="callout-label">keepdims=True — why it matters</div>
+      <code>embeddings</code> has shape <code>(2,3,64)</code>. Without <code>keepdims=True</code>, <code>jnp.mean(..., axis=-1)</code> gives shape <code>(2,3)</code> — the reduced axis disappears entirely. <code>(embeddings - mean)</code> would then try to broadcast <code>(2,3,64)</code> against <code>(2,3)</code>, which fails (shapes don't align from the right). With <code>keepdims=True</code>, mean has shape <code>(2,3,1)</code>, which broadcasts cleanly against <code>(2,3,64)</code> — the single value at position <code>[i,j,0]</code> is subtracted from all 64 elements at <code>[i,j,:]</code>.
+    </div>
+    <div class="callout tip">
+      <div class="callout-label">Pre-norm vs post-norm</div>
+      This codebase applies LayerNorm <em>before</em> attention/feedforward (see GPTBlock below), not after. Pre-norm keeps gradients flowing more directly through the residual path across many stacked blocks — the modern standard (GPT-2 onward), versus the original Transformer paper's post-norm.
+    </div>
+  </section>
+
+  <section id="feedforward">
+    <h2>5. FeedForward</h2>
+    <span class="file-tag">transformer/feed_forward.py</span>
+    <p>After attention mixes information <em>across</em> tokens, FeedForward processes each token's vector independently, expanding it to a wider hidden dimension, applying a nonlinearity, then projecting back down. This is where most of a transformer's raw parameter count and "knowledge capacity" lives.</p>
+    <pre><code><span class="kw">class</span> <span class="cls">FeedForward</span>(nnx.Module):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, embed_dim, scale_dim, use_bias, rngs: nnx.Rngs):
+        self.linear1 = nnx.Linear(embed_dim,scale_dim,use_bias=use_bias,rngs=rngs)
+        self.linear2 = nnx.Linear(scale_dim,embed_dim,use_bias=use_bias,rngs=rngs)
+
+    <span class="kw">def</span> <span class="fn">__call__</span>(self,embeddings):
+        x = self.linear1(embeddings)
+        x = nnx.gelu(x)
+        <span class="kw">return</span> self.linear2(x)</code></pre>
+
+    <h3>Shape trace (embed_dim=64, scaling_factor=4 → scale_dim=256)</h3>
+    <table>
+      <tr><th>Step</th><th>Shape</th></tr>
+      <tr><td>Input</td><td><code>(2, 3, 64)</code></td></tr>
+      <tr><td>After linear1</td><td><code>(2, 3, 256)</code> — expand 4x</td></tr>
+      <tr><td>After GELU</td><td><code>(2, 3, 256)</code> — nonlinearity, shape unchanged</td></tr>
+      <tr><td>After linear2</td><td><code>(2, 3, 64)</code> — project back down to embed_dim</td></tr>
+    </table>
+    <div class="callout insight">
+      <div class="callout-label">Why expand then contract</div>
+      The wider intermediate layer gives the network more "room" to compute nonlinear combinations of the input features before compressing back to embed_dim. This expand-nonlinearity-contract pattern (also called an MLP block) is where transformers store most factual/associative knowledge — much more of it lives here than in the attention weights.
+    </div>
+    <div class="callout tip">
+      <div class="callout-label">Phase 3 upgrade — SwiGLU</div>
+      LLaMA/GLM replace plain GELU with SwiGLU, which uses a gating mechanism (two parallel linear projections, one gating the other) — better quality per parameter, at the cost of one extra linear layer.
+    </div>
+  </section>
+
+  <section id="gptblock">
+    <h2>6. GPTBlock</h2>
+    <span class="file-tag">transformer/gpt_block.py</span>
+    <p>Combines attention and feedforward into one repeatable unit, each wrapped with pre-norm and a residual ("shortcut") connection. Stack N of these to make the full model.</p>
+    <pre><code><span class="kw">class</span> <span class="cls">GPTBlock</span>(nnx.Module):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, config, rngs: nnx.Rngs):
+        self.norm1 = LayerNorm(config[<span class="st">'eps'</span>], config[<span class="st">'embed_dim'</span>])
+        self.attention = MultiHeadAttention(config[<span class="st">'input_dim'</span>], config[<span class="st">'output_dim'</span>], config[<span class="st">'num_heads'</span>], rngs)
+        self.norm2 = LayerNorm(config[<span class="st">'eps'</span>], config[<span class="st">'output_dim'</span>])
+        self.feed_forward = FeedForward(config[<span class="st">'output_dim'</span>], config[<span class="st">'scaling_factor'</span>]*config[<span class="st">'output_dim'</span>], <span class="kw">False</span>, rngs)
+        self.dropout =  nnx.Dropout(config[<span class="st">'dropout'</span>])
+
+    <span class="kw">def</span> <span class="fn">__call__</span>(self, x, rngs: nnx.Rngs):
+        shortcut = x
+        x = self.norm1(x)
+        x = self.attention(x, rngs)
+        x = x + shortcut
+
+        shortcut = x
+        x = self.norm2(x)
+        x = self.feed_forward(x)
+        x = self.dropout(x,rngs=rngs)
+
+        <span class="kw">return</span> x + shortcut</code></pre>
+
+    <div class="flow">
+      <span class="node">x</span> ──┬──────────────────────────────┐<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="arrow">│</span> norm1 → attention <span class="arrow">──────────┤</span> <span class="label">(+)</span> <span class="arrow">──┬──────────────────────┐</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="arrow">│</span> norm2 → ff → dropout <span class="arrow">─┤</span> <span class="label">(+)</span> <span class="arrow">──</span> <span class="node">output</span>
+    </div>
+
+    <div class="callout warning">
+      <div class="callout-label">Why the residual (shortcut) connection exists</div>
+      Without <code>x + shortcut</code>, gradients would have to flow back through every attention and feedforward operation in every stacked block, and could vanish (shrink toward zero) after enough layers. The residual gives gradients a direct, unimpeded path back to earlier layers — this is what makes 12, 32, or 96-layer transformers trainable at all.
+    </div>
+  </section>
+
+  <section id="model">
+    <h2>7. Model</h2>
+    <span class="file-tag">transformer/model.py</span>
+    <p>Wires everything together: embed the tokens, run them through N stacked GPTBlocks, apply a final LayerNorm, then project to vocabulary size to get logits.</p>
+    <pre><code><span class="kw">class</span> <span class="cls">Model</span>(nnx.Module):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, config, rngs: nnx.Rngs):
+        self.embedding = Embedding(config[<span class="st">'vocab_size'</span>], config[<span class="st">'embed_dim'</span>], config[<span class="st">'max_seq_len'</span>], rngs)
+        self.gpt_blocks = nnx.List([GPTBlock(config, rngs) <span class="kw">for</span> _ <span class="kw">in</span> range(config[<span class="st">'num_of_blocks'</span>])])
+        self.layer_norm = LayerNorm(config[<span class="st">'eps'</span>], config[<span class="st">'embed_dim'</span>])
+        self.linear = nnx.Linear(config[<span class="st">'embed_dim'</span>], config[<span class="st">'vocab_size'</span>], rngs=rngs)
+
+    <span class="kw">def</span> <span class="fn">__call__</span>(self, x, rngs: nnx.Rngs):
+        x = self.embedding(x)
+        <span class="kw">for</span> block <span class="kw">in</span> self.gpt_blocks:
+            x = block(x, rngs)
+        x = self.layer_norm(x)
+        <span class="kw">return</span> self.linear(x)</code></pre>
+
+    <h3>Full shape trace (2, 3) token ids → (2, 3, 1000) logits</h3>
+    <table>
+      <tr><th>Stage</th><th>Shape</th></tr>
+      <tr><td>Input token ids</td><td><code>(2, 3)</code></td></tr>
+      <tr><td>After Embedding</td><td><code>(2, 3, 64)</code></td></tr>
+      <tr><td>After GPTBlock 1</td><td><code>(2, 3, 64)</code></td></tr>
+      <tr><td>After GPTBlock 2</td><td><code>(2, 3, 64)</code></td></tr>
+      <tr><td>After final LayerNorm</td><td><code>(2, 3, 64)</code></td></tr>
+      <tr><td>After output Linear</td><td><code>(2, 3, 1000)</code> — logits over vocab</td></tr>
+    </table>
+
+    <div class="callout tip">
+      <div class="callout-label">Why nnx.List, not a plain Python list</div>
+      Flax NNX walks a module's attributes to find params it needs to track for jit/grad. A plain Python <code>list</code> attribute is treated as static (invisible to the tracking system) — the blocks inside it would silently never get trained. <code>nnx.List</code> is a wrapper that makes its contents visible as part of the module's state.
+    </div>
+    <div class="callout insight">
+      <div class="callout-label">What the logits mean</div>
+      <code>logits[b, t, :]</code> is a length-1000 vector of unnormalized scores — one per vocab token — representing the model's prediction for what token comes <em>after</em> position <code>t</code> in sequence <code>b</code>. Apply <code>softmax</code> to turn it into a probability distribution; <code>argmax</code> (or sampling) picks the actual next token during generation.
+    </div>
+  </section>
+
+  <section id="tokenizer">
+    <h2>8. BPE Tokenizer</h2>
+    <span class="file-tag">tokenizers/bpe_tokenizer.py</span>
+    <p>Converts raw text to integers (encode) and back (decode). Byte-Pair Encoding starts from raw UTF-8 bytes (256 possible values) and iteratively merges the most frequent adjacent pair into a new symbol, building up a vocabulary of common substrings/words.</p>
+    <pre><code><span class="kw">def</span> <span class="fn">train</span>(self, text: str):
+    file_ids = list(text.encode(<span class="st">'utf-8'</span>))         <span class="cm"># raw bytes: 0-255</span>
+    <span class="kw">for</span> i <span class="kw">in</span> range(self.max_merges):            <span class="cm"># max_merges=744 → vocab_size=1000</span>
+        pairs = self.create_pairs(file_ids)     <span class="cm"># count adjacent pair frequencies</span>
+        <span class="kw">if</span> <span class="kw">not</span> pairs: <span class="kw">break</span>
+        max_pair = max(pairs, key=pairs.get)    <span class="cm"># most frequent pair</span>
+        self.pairs_dict[max_pair] = <span class="num">256</span> + i     <span class="cm"># assign it a new id</span>
+        file_ids = self.merge(file_ids, max_pair, <span class="num">256</span> + i)  <span class="cm"># replace all occurrences</span>
+    self.build_vocab()</code></pre>
+
+    <h3>Worked example</h3>
+    <pre><code><span class="cm"># text = "aaab", encoded as bytes: [97, 97, 97, 98]</span>
+<span class="cm"># pass 1: pair (97,97) appears twice → most frequent → new id 256</span>
+<span class="cm">#   merge: [256, 97, 98]   ('aa' merged wherever it appears)</span>
+<span class="cm"># pass 2: pair (256,97) appears once, (97,98) appears once → tie, pick one, say (256,97) → id 257</span>
+<span class="cm">#   merge: [257, 98]</span>
+<span class="cm"># vocab now: {256: b'aa', 257: b'aaa', ...}</span>
+<span class="cm"># "aaab" (4 bytes) compresses to 2 tokens: [257, 98]</span></code></pre>
+    <div class="callout insight">
+      <div class="callout-label">MAX_MERGES = 744</div>
+      Final vocab size = 256 base byte values + 744 merges = 1000, matching <code>CONFIG['vocab_size']</code>. This isn't a coincidence — the tokenizer's vocab size and the model's embedding table size must match exactly, since token ids index directly into <code>self.embed</code>.
+    </div>
+  </section>
+
+  <section id="sampler">
+    <h2>9. Sliding Window Sampler</h2>
+    <span class="file-tag">(your implementation)</span>
+    <p>Turns one long stream of token ids into many (input, target) training pairs for next-token prediction, where <code>target</code> is <code>input</code> shifted right by one position.</p>
+    <pre><code><span class="kw">class</span> <span class="cls">SlidingWindowSampler</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, seq_len, batch_size, token_ids, stride=<span class="num">1</span>):
+        inputs, targets = [], []
+        <span class="kw">for</span> i <span class="kw">in</span> range(<span class="num">0</span>, len(token_ids) - seq_len, stride):
+            inputs.append(token_ids[i:i+seq_len])
+            targets.append(token_ids[i+<span class="num">1</span>:i+seq_len+<span class="num">1</span>])
+        self.inputs = np.array(inputs)     <span class="cm"># (num_windows, seq_len)</span>
+        self.targets = np.array(targets)   <span class="cm"># (num_windows, seq_len)</span>
+        self.num_batches = len(self.inputs) // batch_size
+        self.batch_size = batch_size
+
+    <span class="kw">def</span> <span class="fn">shuffle</span>(self):
+        idx = np.random.permutation(len(self.inputs))
+        self.inputs = self.inputs[idx]
+        self.targets = self.targets[idx]
+
+    <span class="kw">def</span> <span class="fn">__iter__</span>(self):
+        <span class="kw">for</span> i <span class="kw">in</span> range(self.num_batches):
+            start = i * self.batch_size
+            end = start + self.batch_size
+            <span class="kw">yield</span> (jnp.array(self.inputs[start:end]),
+                   jnp.array(self.targets[start:end]))</code></pre>
+
+    <h3>Worked example — token_ids = [10,11,12,13,14,15], seq_len=3, stride=1</h3>
+    <pre><code>i=0: input=[<span class="num">10</span>,<span class="num">11</span>,<span class="num">12</span>]  target=[<span class="num">11</span>,<span class="num">12</span>,<span class="num">13</span>]
+i=1: input=[<span class="num">11</span>,<span class="num">12</span>,<span class="num">13</span>]  target=[<span class="num">12</span>,<span class="num">13</span>,<span class="num">14</span>]
+i=2: input=[<span class="num">12</span>,<span class="num">13</span>,<span class="num">14</span>]  target=[<span class="num">13</span>,<span class="num">14</span>,<span class="num">15</span>]
+<span class="cm"># range stops at len(token_ids) - seq_len = 3, so i=0,1,2 only</span>
+<span class="cm"># at every position, target[j] = input[j] shifted one step ahead —</span>
+<span class="cm"># "given tokens up to here, predict the very next one"</span></code></pre>
+    <div class="callout tip">
+      <div class="callout-label">Why yield tuples of JAX arrays</div>
+      <code>__iter__</code> is a generator (uses <code>yield</code>) — batches are produced lazily, one at a time, only when the training loop asks for the next one, rather than materializing every batch in memory up front. Converting to <code>jnp.array</code> only at yield time keeps the bulk storage in cheap NumPy and only pays the JAX conversion cost for the batch currently in use.
+    </div>
+  </section>
+
+</main>
+</div>
+<script>
+const sections = document.querySelectorAll('section[id]');
+const links = document.querySelectorAll('nav a');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const active = document.querySelector(`nav a[href="#${e.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { threshold: 0.3 });
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

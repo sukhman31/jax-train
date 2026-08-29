@@ -1,8 +1,8 @@
 from flax import nnx
 
-from embedding import Embedding
-from gpt_block import GPTBlock
-from layer_norm import LayerNorm
+from .embedding import Embedding
+from .gpt_block import GPTBlock
+from .layer_norm import LayerNorm
 
 class Model(nnx.Module):
     def __init__(self, config, rngs: nnx.Rngs):

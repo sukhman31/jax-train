@@ -1,8 +1,8 @@
 from flax import nnx
 
-from attention import MultiHeadAttention
-from layer_norm import LayerNorm
-from feed_forward import FeedForward
+from .attention import MultiHeadAttention
+from .layer_norm import LayerNorm
+from .feed_forward import FeedForward
 
 
 class GPTBlock(nnx.Module):
