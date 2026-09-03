@@ -1,9 +1,10 @@
 import os, sys
 from flax import nnx
 
-sys.path.insert(0, os.path.dirname(__file__))
+ROOT = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, ROOT)
 
-from transform import Trainer
+from training import Trainer
 
 CONFIG = {
     'vocab_size':      1000,
@@ -20,11 +21,11 @@ CONFIG = {
     'learning_rate':   1e-3,
     'seq_len':         32,
     'batch_size':      8,
-    'num_epochs':      50,
+    'num_epochs':      100,
 }
 
-FILE_PATH = os.path.join(os.path.dirname(__file__), 'resources', 'shakespeare_sample.txt')
-CHECKPOINT_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', 'gpt_shakespeare.pkl')
+FILE_PATH = os.path.join(ROOT, 'resources', 'shakespeare_sample.txt')
+CHECKPOINT_PATH = os.path.join(ROOT, 'checkpoints', 'gpt_shakespeare.pkl')
 
 RNGS = nnx.Rngs(0)
 

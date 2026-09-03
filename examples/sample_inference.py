@@ -1,11 +1,12 @@
 import os, sys
 from flax import nnx
 
-sys.path.insert(0, os.path.dirname(__file__))
+ROOT = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, ROOT)
 
 from inference import Generator
 
-CHECKPOINT_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', 'gpt_shakespeare.pkl')
+CHECKPOINT_PATH = os.path.join(ROOT, 'checkpoints', 'gpt_shakespeare.pkl')
 
 RNGS = nnx.Rngs(0)
 

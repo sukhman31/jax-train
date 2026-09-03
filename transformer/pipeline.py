@@ -5,12 +5,12 @@ import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from tokenizers.bpe_tokenizer import BPETokenizer
-from embedding import Embedding
-from attention import ScaledDotProdAttention, MultiHeadAttention
-from layer_norm import LayerNorm
-from feed_forward import FeedForward
-from gpt_block import GPTBlock
-from model import Model
+from .embedding import Embedding
+from .attention import ScaledDotProdAttention, MultiHeadAttention
+from .layer_norm import LayerNorm
+from .feed_forward import FeedForward
+from .gpt_block import GPTBlock
+from .model import Model
 
 # --- config ---
 CONFIG = {

@@ -2,24 +2,20 @@ from flax import nnx
 import jax
 import jax.numpy as jnp
 
+from .projection import Projection
+
 class ScaledDotProdAttention(nnx.Module):
 
     def __init__(self, input_dim, output_dim, rngs: nnx.Rngs):
-        self.q = nnx.Param(
-            jax.random.normal(rngs.params(),(input_dim,output_dim))
-        )
-        self.k = nnx.Param(
-            jax.random.normal(rngs.params(),(input_dim,output_dim))
-        )
-        self.v = nnx.Param(
-            jax.random.normal(rngs.params(),(input_dim,output_dim))
-        )
+        self.q = Projection(input_dim,output_dim,rngs)
+        self.k = Projection(input_dim,output_dim,rngs)
+        self.v = Projection(input_dim,output_dim,rngs)
         self.dropout = nnx.Dropout(0.2)
     
     def __call__(self, embeddings, rngs: nnx.Rngs):
-        query = embeddings @ self.q.value
-        key = embeddings @ self.k.value
-        value = embeddings @ self.v.value
+        query = self.q(embeddings)
+        key = self.k(embeddings)
+        value = self.v(embeddings)
         attention_scores = query @ jnp.swapaxes(key, -1, -2)
         mask = jnp.tril(jnp.ones((attention_scores.shape[-1],attention_scores.shape[-1]), dtype=bool))
         attention_scores = jnp.where(mask,attention_scores,-jnp.inf)
@@ -35,23 +31,17 @@ class MultiHeadAttention(nnx.Module):
         assert output_dim % num_heads == 0, "output_dim must be divisible by num_heads"
         self.num_heads = num_heads
         self.head_dim = output_dim//num_heads
-        self.q = nnx.Param(
-            jax.random.normal(rngs.params(),(input_dim,output_dim))
-        )
-        self.k = nnx.Param(
-            jax.random.normal(rngs.params(),(input_dim,output_dim))
-        )
-        self.v = nnx.Param(
-            jax.random.normal(rngs.params(),(input_dim,output_dim))
-        )
+        self.q = Projection(input_dim,output_dim,rngs)
+        self.k = Projection(input_dim,output_dim,rngs)
+        self.v = Projection(input_dim,output_dim,rngs)
         self.dropout = nnx.Dropout(0.2)
     
     def __call__(self, embeddings, rngs: nnx.Rngs):
         b, tokens, _ = embeddings.shape
 
-        query = embeddings @ self.q.value
-        key = embeddings @ self.k.value
-        value = embeddings @ self.v.value
+        query = self.q(embeddings)
+        key = self.k(embeddings)
+        value = self.v(embeddings)
 
         query = jnp.reshape(query, (b,tokens,self.num_heads,self.head_dim)).swapaxes(1,2)
         key = jnp.reshape(key, (b,tokens,self.num_heads,self.head_dim)).swapaxes(1,2)
