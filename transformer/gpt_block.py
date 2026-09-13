@@ -1,15 +1,15 @@
 from flax import nnx
 
 from .attention import MultiHeadAttention
-from .layer_norm import LayerNorm
+from .rms_norm import RMSNorm
 from .feed_forward import FeedForward
 
 
 class GPTBlock(nnx.Module):
     def __init__(self, config, rngs: nnx.Rngs):
-        self.norm1 = LayerNorm(config['eps'], config['embed_dim'])
+        self.norm1 = RMSNorm(config['eps'], config['embed_dim'])
         self.attention = MultiHeadAttention(config['input_dim'], config['output_dim'], config['num_heads'], rngs)
-        self.norm2 = LayerNorm(config['eps'], config['output_dim'])
+        self.norm2 = RMSNorm(config['eps'], config['output_dim'])
         self.feed_forward = FeedForward(config['output_dim'], config['scaling_factor']*config['output_dim'], False, rngs)
         self.dropout =  nnx.Dropout(config['dropout'])
     
