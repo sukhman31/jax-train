@@ -40,7 +40,7 @@ print(f"decoded: {decoded}")
 token_ids = jnp.array([encoded[:3], encoded[:3]])  # (batch=2, seq_len=3)
 
 # --- component checks ---
-embedding  = Embedding(CONFIG['vocab_size'], CONFIG['embed_dim'], CONFIG['max_seq_len'], RNGS)
+embedding  = Embedding(CONFIG['vocab_size'], CONFIG['embed_dim'], RNGS)
 attention  = ScaledDotProdAttention(CONFIG['embed_dim'], CONFIG['output_dim'], RNGS)
 mha        = MultiHeadAttention(CONFIG['embed_dim'], CONFIG['output_dim'], CONFIG['num_heads'], RNGS)
 layer_norm = LayerNorm(CONFIG['eps'], CONFIG['embed_dim'])
