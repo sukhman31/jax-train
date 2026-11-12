@@ -38,7 +38,7 @@ class MultiHeadAttention(nnx.Module):
         self.rope = RoPE(self.head_dim)
         self.dropout = nnx.Dropout(0.2)
 
-    def __call__(self, embeddings, rngs: nnx.Rngs):
+    def __call__(self, embeddings, rngs: nnx.Rngs, cache=None):
         b, tokens, _ = embeddings.shape
 
         query = self.q(embeddings)
@@ -49,14 +49,22 @@ class MultiHeadAttention(nnx.Module):
         key = jnp.reshape(key, (b,tokens,self.num_heads,self.head_dim)).swapaxes(1,2)
         value = jnp.reshape(value, (b,tokens,self.num_heads,self.head_dim)).swapaxes(1,2)
 
-        query = self.rope(query)
-        key = self.rope(key)
+        offset = 0 if cache is None else cache[0].shape[-2]
+        query = self.rope(query, offset)
+        key = self.rope(key, offset)
+
+        if cache is not None:
+            key = jnp.concatenate([cache[0], key], axis=-2)
+            value = jnp.concatenate([cache[1], value], axis=-2)
+        new_cache = (key, value)
 
         attention_scores = query @ jnp.swapaxes(key, -1, -2)
-        mask = jnp.tril(jnp.ones((attention_scores.shape[-1],attention_scores.shape[-1]), dtype=bool))
+        total_len = key.shape[-2]
+        mask = jnp.tril(jnp.ones((total_len, total_len), dtype=bool))
+        mask = mask[-tokens:, :]
         attention_scores = jnp.where(mask,attention_scores,-jnp.inf)
         attention_weights = nnx.softmax(attention_scores/key.shape[-1]**0.5,axis=-1)
         attention_weights = self.dropout(attention_weights, rngs=rngs)
         attention = attention_weights @ value
         attention = jnp.swapaxes(attention, 1, 2)
-        return jnp.reshape(attention, (b,tokens, self.num_heads*self.head_dim))
+        return jnp.reshape(attention, (b,tokens, self.num_heads*self.head_dim)), new_cache

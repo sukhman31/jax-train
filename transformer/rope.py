@@ -8,9 +8,9 @@ class RoPE(nnx.Module):
         self.pairs = head_dim//2
         self.inv_freq = 1.0 / (base ** (jnp.arange(0, head_dim, 2) / head_dim))
 
-    def __call__(self, x):
+    def __call__(self, x, offset=0):
         seq_len = x.shape[-2]
-        positions = jnp.arange(seq_len)
+        positions = jnp.arange(offset, offset + seq_len)
         angles = jnp.outer(positions, self.inv_freq)
 
         cos_vals = jnp.cos(angles)

@@ -40,7 +40,7 @@ class LoRATrainer(nnx.Module):
         
     @staticmethod
     def loss_fn(model, x, target, rngs):
-        preds = model(x, rngs)
+        preds, _ = model(x, rngs)
         return jnp.mean(optax.softmax_cross_entropy_with_integer_labels(preds, target))
 
     @nnx.jit

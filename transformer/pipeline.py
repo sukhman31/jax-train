@@ -62,10 +62,10 @@ print(f"after LayerNorm:   {n.shape}")   # (2, 3, 64)
 f = ff(n)
 print(f"after FeedForward: {f.shape}")   # (2, 3, 64)
 
-b = block(x, RNGS)
+b, _ = block(x, RNGS)
 print(f"after GPTBlock:    {b.shape}")   # (2, 3, 64)
 
 # --- full model ---
 model  = Model(CONFIG, RNGS)
-logits = model(token_ids, RNGS)
+logits, _ = model(token_ids, RNGS)
 print(f"after Model:       {logits.shape}")  # (2, 3, 1000)

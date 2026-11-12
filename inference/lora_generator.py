@@ -39,19 +39,21 @@ class LoRAGenerator(nnx.Module):
 
     def generate(self, prompt, max_new_tokens=100, temperature=0.8):
         token_ids = self.tokenizer.encode(prompt)
-        max_seq_len = self.config['max_seq_len']
+
+        x = jnp.array([token_ids])
+        logits, cache = self.model(x, self.rngs, cache=None)
+        next_logits = logits[0, -1, :]
 
         for _ in range(max_new_tokens):
-            context = token_ids[-max_seq_len:]
-            x = jnp.array([context])
-            logits = self.model(x, self.rngs)
-            next_logits = logits[0, -1, :]
-
             if temperature <= 0:
                 next_id = int(jnp.argmax(next_logits))
             else:
                 next_id = int(jax.random.categorical(self.rngs.sample(), next_logits / temperature))
 
             token_ids.append(next_id)
+
+            x = jnp.array([[next_id]])
+            logits, cache = self.model(x, self.rngs, cache=cache)
+            next_logits = logits[0, -1, :]
 
         return self.tokenizer.decode(token_ids)
