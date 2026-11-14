@@ -38,7 +38,7 @@ class MultiHeadAttention(nnx.Module):
         self.rope = RoPE(self.head_dim)
         self.dropout = nnx.Dropout(0.2)
 
-    def __call__(self, embeddings, rngs: nnx.Rngs, cache=None):
+    def __call__(self, embeddings, rngs: nnx.Rngs, cache=None, cache_pos=None):
         b, tokens, _ = embeddings.shape
 
         query = self.q(embeddings)
@@ -49,21 +49,30 @@ class MultiHeadAttention(nnx.Module):
         key = jnp.reshape(key, (b,tokens,self.num_heads,self.head_dim)).swapaxes(1,2)
         value = jnp.reshape(value, (b,tokens,self.num_heads,self.head_dim)).swapaxes(1,2)
 
-        offset = 0 if cache is None else cache[0].shape[-2]
+        offset = 0 if cache_pos is None else cache_pos
         query = self.rope(query, offset)
         key = self.rope(key, offset)
 
         if cache is not None:
-            key = jnp.concatenate([cache[0], key], axis=-2)
-            value = jnp.concatenate([cache[1], value], axis=-2)
-        new_cache = (key, value)
+            cache_k, cache_v = cache
+            indices = jnp.arange(tokens) + cache_pos
+            cache_k = cache_k.at[:, :, indices, :].set(key)
+            cache_v = cache_v.at[:, :, indices, :].set(value)
+            key = cache_k
+            value = cache_v
+            new_cache = (cache_k, cache_v)
+            valid_len = cache_pos + tokens
+        else:
+            new_cache = None
+            valid_len = tokens
 
         attention_scores = query @ jnp.swapaxes(key, -1, -2)
         total_len = key.shape[-2]
-        mask = jnp.tril(jnp.ones((total_len, total_len), dtype=bool))
-        mask = mask[-tokens:, :]
+        row_ids = jnp.arange(tokens) + offset
+        col_ids = jnp.arange(total_len)
+        mask = (col_ids[None, :] <= row_ids[:, None]) & (col_ids[None, :] < valid_len)
         attention_scores = jnp.where(mask,attention_scores,-jnp.inf)
-        attention_weights = nnx.softmax(attention_scores/key.shape[-1]**0.5,axis=-1)
+        attention_weights = nnx.softmax(attention_scores/self.head_dim**0.5,axis=-1)
         attention_weights = self.dropout(attention_weights, rngs=rngs)
         attention = attention_weights @ value
         attention = jnp.swapaxes(attention, 1, 2)

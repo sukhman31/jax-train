@@ -13,10 +13,10 @@ class GPTBlock(nnx.Module):
         self.feed_forward = FeedForward(config['output_dim'], config['scaling_factor']*config['output_dim'], False, rngs)
         self.dropout =  nnx.Dropout(config['dropout'])
     
-    def __call__(self, x, rngs: nnx.Rngs, cache=None):
+    def __call__(self, x, rngs: nnx.Rngs, cache=None, cache_pos=None):
         shortcut = x
         x = self.norm1(x)
-        x, new_cache = self.attention(x, rngs, cache)
+        x, new_cache = self.attention(x, rngs, cache, cache_pos)
         x = x + shortcut
 
         shortcut = x
