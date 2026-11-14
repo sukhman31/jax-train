@@ -10,7 +10,7 @@ class RoPE(nnx.Module):
 
     def __call__(self, x, offset=0):
         seq_len = x.shape[-2]
-        positions = jnp.arange(offset, offset + seq_len)
+        positions = jnp.arange(seq_len) + offset
         angles = jnp.outer(positions, self.inv_freq)
 
         cos_vals = jnp.cos(angles)

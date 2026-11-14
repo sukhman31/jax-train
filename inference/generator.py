@@ -1,4 +1,5 @@
 import pickle
+from functools import partial
 
 import jax
 import jax.numpy as jnp
@@ -35,6 +36,13 @@ class Generator(nnx.Module):
             cache.append((k, v))
         return cache
 
+    def _decode_single(self, graphdef, state, token_id, cache, cache_pos):
+        model = nnx.merge(graphdef, state)
+        x = token_id.reshape(1, 1)
+        logits, new_cache = model(x, self.rngs, cache=cache, cache_pos=cache_pos)
+        next_id = jnp.argmax(logits[0, 0, :]).astype(jnp.int32)
+        return next_id, new_cache
+
     def generate(self, prompt, max_new_tokens=100, temperature=0.8):
         token_ids = self.tokenizer.encode(prompt)
         prompt_len = len(token_ids)
@@ -42,20 +50,35 @@ class Generator(nnx.Module):
 
         cache = self._init_cache(1, max_len)
 
-        x = jnp.array([token_ids])
-        logits, cache = self.model(x, self.rngs, cache=cache, cache_pos=0)
-        next_logits = logits[0, -1, :]
+        graphdef, state = nnx.split(self.model)
 
-        for i in range(max_new_tokens):
-            if temperature <= 0:
-                next_id = int(jnp.argmax(next_logits))
-            else:
-                next_id = int(jax.random.categorical(self.rngs.sample(), next_logits / temperature))
+        @jax.jit
+        def prefill(state, token_ids_arr, cache):
+            model = nnx.merge(graphdef, state)
+            x = token_ids_arr.reshape(1, -1)
+            logits, new_cache = model(x, self.rngs, cache=cache, cache_pos=0)
+            first_id = jnp.argmax(logits[0, -1, :]).astype(jnp.int32)
+            return first_id, new_cache
 
-            token_ids.append(next_id)
+        @jax.jit
+        def decode_loop(state, first_id, cache):
+            generated = jnp.zeros(max_new_tokens, dtype=jnp.int32)
+            generated = generated.at[0].set(first_id)
 
-            x = jnp.array([[next_id]])
-            logits, cache = self.model(x, self.rngs, cache=cache, cache_pos=prompt_len + i)
-            next_logits = logits[0, -1, :]
+            def body(i, carry):
+                gen_tokens, c, prev_id = carry
+                next_id, new_c = self._decode_single(graphdef, state, prev_id, c, prompt_len + i)
+                gen_tokens = gen_tokens.at[i].set(next_id)
+                return gen_tokens, new_c, next_id
 
+            generated, final_cache, _ = jax.lax.fori_loop(
+                1, max_new_tokens, body, (generated, cache, first_id)
+            )
+            return generated
+
+        token_ids_arr = jnp.array(token_ids, dtype=jnp.int32)
+        first_id, cache = prefill(state, token_ids_arr, cache)
+        generated = decode_loop(state, first_id, cache)
+
+        token_ids.extend(generated.tolist())
         return self.tokenizer.decode(token_ids)
