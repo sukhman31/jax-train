@@ -1,5 +1,6 @@
 import os
 import pickle
+import time
 
 import jax
 import jax.numpy as jnp
@@ -32,30 +33,39 @@ class Trainer(nnx.Module):
         return loss
 
     def prepare_data(self, file_path):
-        self.tokenizer.ingest_docs(file_path)
         with open(file_path, 'r', encoding='utf-8') as f:
             raw_text = f.read()
+        sample = raw_text[:100_000]
+        self.tokenizer.train(sample)
+        print(f"tokenizer trained on {len(sample)} chars, {len(self.tokenizer.pairs_dict)} merges")
         token_ids = self.tokenizer.encode(raw_text)
 
         self.sampler = SlidingWindowSampler(
             seq_len=self.config['seq_len'],
             batch_size=self.config['batch_size'],
             token_ids=token_ids,
+            stride=self.config.get('stride', 1),
         )
         print(f"corpus: {len(raw_text)} chars -> {len(token_ids)} tokens, "
               f"{self.sampler.num_batches} batches/epoch")
 
     def train(self, file_path, num_epochs):
         self.prepare_data(file_path)
+        total_batches = self.sampler.num_batches
+        train_start = time.time()
 
         for i in range(num_epochs):
             self.sampler.shuffle()
             losses = []
-            for x, y in self.sampler:
+            epoch_start = time.time()
+            for step, (x, y) in enumerate(self.sampler):
                 losses.append(self.train_step(x, y))
-            if i % 5 == 0:
-                avg_loss = jnp.mean(jnp.array(losses))
-                print(f'Loss after {i+1} epochs: {avg_loss:.2f}')
+                if step % 50 == 0:
+                    print(f"  epoch {i+1}/{num_epochs} | batch {step+1}/{total_batches} | loss: {float(losses[-1]):.4f}", flush=True)
+            avg_loss = jnp.mean(jnp.array(losses))
+            elapsed = time.time() - epoch_start
+            total = time.time() - train_start
+            print(f"epoch {i+1}/{num_epochs} | avg loss: {float(avg_loss):.4f} | {elapsed:.1f}s | total: {total:.0f}s", flush=True)
 
     def save(self, path):
         _, model_state = nnx.split(self.model)
