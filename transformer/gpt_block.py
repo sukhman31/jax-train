@@ -8,7 +8,7 @@ from .feed_forward import FeedForward
 class GPTBlock(nnx.Module):
     def __init__(self, config, rngs: nnx.Rngs):
         self.norm1 = RMSNorm(config['eps'], config['embed_dim'])
-        self.attention = MultiHeadAttention(config['input_dim'], config['output_dim'], config['num_heads'], rngs)
+        self.attention = MultiHeadAttention(config['input_dim'], config['output_dim'], config['num_heads'], rngs, num_kv_heads=config.get('num_kv_heads'))
         self.norm2 = RMSNorm(config['eps'], config['output_dim'])
         self.feed_forward = FeedForward(config['output_dim'], config['scaling_factor']*config['output_dim'], False, rngs)
         self.dropout =  nnx.Dropout(config['dropout'])

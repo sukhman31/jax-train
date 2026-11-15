@@ -27,12 +27,12 @@ class Generator(nnx.Module):
 
     def _init_cache(self, batch_size, max_len):
         num_blocks = self.config['num_of_blocks']
-        num_heads = self.config['num_heads']
-        head_dim = self.config['output_dim'] // num_heads
+        num_kv_heads = self.config.get('num_kv_heads', self.config['num_heads'])
+        head_dim = self.config['output_dim'] // self.config['num_heads']
         cache = []
         for _ in range(num_blocks):
-            k = jnp.zeros((batch_size, num_heads, max_len, head_dim))
-            v = jnp.zeros((batch_size, num_heads, max_len, head_dim))
+            k = jnp.zeros((batch_size, num_kv_heads, max_len, head_dim))
+            v = jnp.zeros((batch_size, num_kv_heads, max_len, head_dim))
             cache.append((k, v))
         return cache
 
