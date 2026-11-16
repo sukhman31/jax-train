@@ -3,3 +3,4 @@ MISSION.md
 __pycache__
 checkpoints
 examples/benchmark.py
+resources/tinystories.txt
