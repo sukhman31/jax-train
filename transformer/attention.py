@@ -73,14 +73,16 @@ class MultiHeadAttention(nnx.Module):
             key = jnp.repeat(key, self.num_groups, axis=1)
             value = jnp.repeat(value, self.num_groups, axis=1)
 
-        attention_scores = query @ jnp.swapaxes(key, -1, -2)
         total_len = key.shape[-2]
         row_ids = jnp.arange(tokens) + offset
         col_ids = jnp.arange(total_len)
         mask = (col_ids[None, :] <= row_ids[:, None]) & (col_ids[None, :] < valid_len)
-        attention_scores = jnp.where(mask,attention_scores,-jnp.inf)
-        attention_weights = nnx.softmax(attention_scores/self.head_dim**0.5,axis=-1)
-        attention_weights = self.dropout(attention_weights, rngs=rngs)
-        attention = attention_weights @ value
+
+        attention = jax.nn.dot_product_attention(
+            query, key, value,
+            bias=jnp.where(mask, 0.0, -1e9),
+            scale=1.0 / self.head_dim**0.5,
+        )
+        attention = self.dropout(attention, rngs=rngs)
         attention = jnp.swapaxes(attention, 1, 2)
         return jnp.reshape(attention, (b,tokens, self.num_heads*self.head_dim)), new_cache
