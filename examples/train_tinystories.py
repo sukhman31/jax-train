@@ -18,11 +18,11 @@ CONFIG = {
     'eps':             1e-5,
     'num_of_blocks':   6,
     'max_merges':      2000,
-    'learning_rate':   3e-4,
+    'learning_rate':   1e-3,
     'seq_len':         256,
     'batch_size':      32,
     'stride':          128,
-    'num_epochs':      20,
+    'num_epochs':      100,
 }
 
 FILE_PATH = os.path.join(ROOT, 'resources', 'tinystories.txt')

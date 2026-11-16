@@ -79,10 +79,9 @@ class MultiHeadAttention(nnx.Module):
         mask = (col_ids[None, :] <= row_ids[:, None]) & (col_ids[None, :] < valid_len)
 
         attention = jax.nn.dot_product_attention(
-            query, key, value,
+            query.swapaxes(1, 2), key.swapaxes(1, 2), value.swapaxes(1, 2),
             bias=jnp.where(mask, 0.0, -1e9),
             scale=1.0 / self.head_dim**0.5,
         )
         attention = self.dropout(attention, rngs=rngs)
-        attention = jnp.swapaxes(attention, 1, 2)
         return jnp.reshape(attention, (b,tokens, self.num_heads*self.head_dim)), new_cache
