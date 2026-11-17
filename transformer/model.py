@@ -11,12 +11,13 @@ class Model(nnx.Module):
         self.layer_norm = RMSNorm(config['eps'], config['embed_dim'])
         self.linear = nnx.Linear(config['embed_dim'], config['vocab_size'], rngs=rngs)
 
-    def __call__(self, x, rngs: nnx.Rngs, cache=None, cache_pos=None):
+    def __call__(self, x, rngs: nnx.Rngs, cache=None, cache_pos=None, exit_after=None):
         x = self.embedding(x)
+        num_blocks = len(self.gpt_blocks) if exit_after is None else exit_after
         new_caches = []
-        for i, block in enumerate(self.gpt_blocks):
+        for i in range(num_blocks):
             block_cache = cache[i] if cache is not None else None
-            x, new_cache = block(x, rngs, block_cache, cache_pos)
+            x, new_cache = self.gpt_blocks[i](x, rngs, block_cache, cache_pos)
             new_caches.append(new_cache)
         x = self.layer_norm(x)
         return self.linear(x), new_caches
