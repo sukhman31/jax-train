@@ -23,8 +23,9 @@ class Trainer(nnx.Module):
 
     @staticmethod
     def loss_fn(model, x, target, rngs):
-        preds, _ = model(x, rngs)
-        return jnp.mean(optax.softmax_cross_entropy_with_integer_labels(preds, target))
+        preds, _, aux_loss = model(x, rngs)
+        main_loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(preds, target))
+        return main_loss + 0.01 * aux_loss
 
     @nnx.jit
     def train_step(self, x, target):

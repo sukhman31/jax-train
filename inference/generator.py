@@ -71,7 +71,7 @@ class Generator(nnx.Module):
                         temperature, top_k, top_p, repetition_penalty):
         model = nnx.merge(graphdef, state)
         x = token_id.reshape(1, 1)
-        logits, new_cache = model(x, self.rngs, cache=cache, cache_pos=cache_pos)
+        logits, new_cache, _ = model(x, self.rngs, cache=cache, cache_pos=cache_pos)
         next_id = self._sample_token(
             logits[0, 0, :], generated, num_generated, key,
             temperature, top_k, top_p, repetition_penalty,
@@ -98,7 +98,7 @@ class Generator(nnx.Module):
         def prefill(state, token_ids_arr, cache, all_tokens, rng_key):
             model = nnx.merge(graphdef, state)
             x = token_ids_arr.reshape(1, -1)
-            logits, new_cache = model(x, self.rngs, cache=cache, cache_pos=0)
+            logits, new_cache, _ = model(x, self.rngs, cache=cache, cache_pos=0)
             key, rng_key = jax.random.split(rng_key)
             first_id = self._sample_token(
                 logits[0, -1, :], all_tokens, prompt_len, key,

@@ -56,7 +56,7 @@ class LoRAGenerator(nnx.Module):
         cache = self._init_cache(1, max_len)
 
         x = jnp.array([token_ids])
-        logits, cache = self.model(x, self.rngs, cache=cache, cache_pos=0)
+        logits, cache, _ = self.model(x, self.rngs, cache=cache, cache_pos=0)
         next_logits = logits[0, -1, :]
 
         for i in range(max_new_tokens):
@@ -68,7 +68,7 @@ class LoRAGenerator(nnx.Module):
             token_ids.append(next_id)
 
             x = jnp.array([[next_id]])
-            logits, cache = self.model(x, self.rngs, cache=cache, cache_pos=prompt_len + i)
+            logits, cache, _ = self.model(x, self.rngs, cache=cache, cache_pos=prompt_len + i)
             next_logits = logits[0, -1, :]
 
         return self.tokenizer.decode(token_ids)

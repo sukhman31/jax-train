@@ -87,7 +87,7 @@ class SpeculativeGenerator(nnx.Module):
         def prefill(state, token_ids_arr, cache, rng_key, all_tokens):
             model = nnx.merge(graphdef, state)
             x = token_ids_arr.reshape(1, -1)
-            logits, new_cache = model(x, self.rngs, cache=cache, cache_pos=0)
+            logits, new_cache, _ = model(x, self.rngs, cache=cache, cache_pos=0)
             key, rng_key = jax.random.split(rng_key)
             first_id = self._sample_token(
                 logits[0, -1, :], all_tokens, prompt_len, key,
@@ -99,7 +99,7 @@ class SpeculativeGenerator(nnx.Module):
         def draft_one(state, token_id, draft_cache, cache_pos, all_tokens, num_gen, rng_key):
             model = nnx.merge(graphdef, state)
             x = token_id.reshape(1, 1)
-            logits, new_draft_cache = model(
+            logits, new_draft_cache, _ = model(
                 x, self.rngs, cache=draft_cache, cache_pos=cache_pos,
                 exit_after=draft_layers,
             )
@@ -115,7 +115,7 @@ class SpeculativeGenerator(nnx.Module):
         def verify_batch(state, draft_tokens, full_cache, cache_pos):
             model = nnx.merge(graphdef, state)
             x = draft_tokens.reshape(1, -1)
-            logits, new_cache = model(
+            logits, new_cache, _ = model(
                 x, self.rngs, cache=full_cache, cache_pos=cache_pos,
             )
             logits_f = logits[0].astype(jnp.float32)

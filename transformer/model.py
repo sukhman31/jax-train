@@ -15,9 +15,11 @@ class Model(nnx.Module):
         x = self.embedding(x)
         num_blocks = len(self.gpt_blocks) if exit_after is None else exit_after
         new_caches = []
+        total_aux_loss = 0.0
         for i in range(num_blocks):
             block_cache = cache[i] if cache is not None else None
-            x, new_cache = self.gpt_blocks[i](x, rngs, block_cache, cache_pos)
+            x, new_cache, aux_loss = self.gpt_blocks[i](x, rngs, block_cache, cache_pos)
             new_caches.append(new_cache)
+            total_aux_loss = total_aux_loss + aux_loss
         x = self.layer_norm(x)
-        return self.linear(x), new_caches
+        return self.linear(x), new_caches, total_aux_loss
