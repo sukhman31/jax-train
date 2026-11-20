@@ -22,7 +22,7 @@ CONFIG = {
     'seq_len':         256,
     'batch_size':      32,
     'stride':          128,
-    'num_epochs':      100,
+    'num_epochs':      200,
 }
 
 FILE_PATH = os.path.join(ROOT, 'resources', 'tinystories.txt')
