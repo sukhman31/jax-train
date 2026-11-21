@@ -1,0 +1,41 @@
+edition = "2023";
+
+package inference;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/suksingh/gpt/gen/go/inference";
+
+service InferenceService {
+
+    // Server-streaming: one GenerateResponse per chunk of text, then a final one with done=true.
+    rpc Generate(GenerateRequest) returns (stream GenerateResponse) {
+        option (google.api.http) = {
+            post: "/v1/generate"
+            body: "*"
+        };
+    }
+}
+
+// Unset (zero) sampling fields fall back to server defaults.
+message GenerateRequest {
+    string prompt = 1;
+    int32 max_new_tokens = 2;
+    float temperature = 3;
+    int32 top_k = 4;
+    float top_p = 5;
+    float repetition_penalty = 6;
+}
+
+message GenerationStats {
+    int32 prompt_tokens = 1;
+    int32 generated_tokens = 2;
+    float ttft_ms = 3;
+    float tokens_per_second = 4;
+}
+
+message GenerateResponse {
+    string text = 1;
+    bool done = 2;
+    GenerationStats stats = 3;
+}

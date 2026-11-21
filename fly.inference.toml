@@ -1,0 +1,30 @@
+# Inference service (JAX on CPU). Internal only: reached by the gateway over Flycast.
+# First deploy:  fly deploy --config fly.inference.toml --flycast
+# Swap models:   change CHECKPOINT below and redeploy.
+
+app = "tokenizer-inference"
+primary_region = "ams"
+
+[build]
+  dockerfile = "serving/Dockerfile"
+
+  [build.args]
+    CHECKPOINT = "checkpoints/gpt_tinystories_dev.pkl"
+
+[env]
+  GRPC_PORT = "50051"
+
+[[services]]
+  internal_port = 50051
+  protocol = "tcp"
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[services.ports]]
+    port = 50051
+
+[[vm]]
+  memory = "2gb"
+  cpu_kind = "shared"
+  cpus = 1

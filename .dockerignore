@@ -1,0 +1,10 @@
+# Only ship what the inference server needs
+*
+!transformer/
+!tokenizers/
+!inference/
+!lora/
+!serving/
+!checkpoints/*.pkl
+**/__pycache__
+serving/protos/
