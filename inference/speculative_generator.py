@@ -5,6 +5,7 @@ import jax.numpy as jnp
 from flax import nnx
 
 from transformer import Model
+from .sampling import sample_token
 from tokenizers.bpe_tokenizer import BPETokenizer
 
 
@@ -35,36 +36,6 @@ class SpeculativeGenerator(nnx.Module):
             cache.append((k, v))
         return cache
 
-    def _sample_token(self, logits, all_tokens, num_generated, key,
-                       temperature, top_k, top_p, repetition_penalty):
-        logits = logits.astype(jnp.float32)
-
-        valid = (jnp.arange(all_tokens.shape[0]) < num_generated).astype(jnp.float32)
-        penalty_mask = jnp.zeros_like(logits).at[all_tokens].add(valid)
-        penalty_mask = (penalty_mask > 0).astype(jnp.float32)
-        logits = jnp.where(
-            penalty_mask > 0,
-            jnp.where(logits > 0, logits / repetition_penalty, logits * repetition_penalty),
-            logits,
-        )
-
-        logits = logits / temperature
-
-        sorted_indices = jnp.argsort(-logits)
-        sorted_logits = logits[sorted_indices]
-
-        topk_mask = jnp.arange(logits.shape[0]) < top_k
-        sorted_logits = jnp.where(topk_mask, sorted_logits, -jnp.inf)
-
-        sorted_probs = jax.nn.softmax(sorted_logits)
-        cumulative_probs = jnp.cumsum(sorted_probs)
-        nucleus_mask = cumulative_probs - sorted_probs < top_p
-        sorted_logits = jnp.where(nucleus_mask, sorted_logits, -jnp.inf)
-
-        probs = jax.nn.softmax(sorted_logits)
-        sampled_index = jax.random.categorical(key, jnp.log(probs + 1e-10))
-        return sorted_indices[sampled_index].astype(jnp.int32)
-
     def generate(self, prompt, max_new_tokens=100, temperature=0.8,
                  top_k=50, top_p=0.9, repetition_penalty=1.2,
                  draft_layers=2, num_speculative=4):
@@ -89,7 +60,7 @@ class SpeculativeGenerator(nnx.Module):
             x = token_ids_arr.reshape(1, -1)
             logits, new_cache, _ = model(x, self.rngs, cache=cache, cache_pos=0)
             key, rng_key = jax.random.split(rng_key)
-            first_id = self._sample_token(
+            first_id = sample_token(
                 logits[0, -1, :], all_tokens, prompt_len, key,
                 temperature, top_k, top_p, repetition_penalty,
             )
@@ -105,7 +76,7 @@ class SpeculativeGenerator(nnx.Module):
             )
             probs = jax.nn.softmax(logits[0, 0, :].astype(jnp.float32))
             key, rng_key = jax.random.split(rng_key)
-            token = self._sample_token(
+            token = sample_token(
                 logits[0, 0, :], all_tokens, num_gen, key,
                 temperature, top_k, top_p, repetition_penalty,
             )
@@ -178,7 +149,7 @@ class SpeculativeGenerator(nnx.Module):
                     accepted += 1
                 else:
                     rng_key, resample_key = jax.random.split(rng_key)
-                    resampled = self._sample_token(
+                    resampled = sample_token(
                         main_logits[i], all_tokens, pos + i, resample_key,
                         temperature, top_k, top_p, repetition_penalty,
                     )
