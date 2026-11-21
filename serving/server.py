@@ -7,7 +7,6 @@ from concurrent import futures
 
 import grpc
 
-from serving.engine import InferenceEngine, TextStreamer
 from serving.gen.inference import inference_api_pb2 as pb
 from serving.gen.inference import inference_api_pb2_grpc as pb_grpc
 
@@ -31,6 +30,9 @@ class InferenceServicer(pb_grpc.InferenceServiceServicer):
         threading.Thread(target=self._load, args=(checkpoint_path,), daemon=True).start()
 
     def _load(self, checkpoint_path):
+        # Importing JAX takes seconds; doing it here lets the port open right away on a cold start.
+        from serving.engine import InferenceEngine
+
         start = time.perf_counter()
         engine = InferenceEngine(checkpoint_path)
         loaded = time.perf_counter()
@@ -68,6 +70,8 @@ class InferenceServicer(pb_grpc.InferenceServiceServicer):
             self.busy.release()
 
     def _generate(self, engine, prompt, params, context):
+        from serving.engine import TextStreamer
+
         start = time.perf_counter()
         prompt_ids = engine.encode(prompt)
         streamer = TextStreamer(engine.tokenizer.vocab)
@@ -115,7 +119,12 @@ def serve():
     server.add_insecure_port(f'[::]:{port}')
     server.start()
     log.info('inference server listening on %s, loading %s', port, checkpoint_path)
-    server.wait_for_termination()
+    try:
+        server.wait_for_termination()
+    except KeyboardInterrupt:
+        # Fly stops idle machines with SIGINT; finish in-flight streams instead of dumping a traceback
+        log.info('shutting down')
+        server.stop(grace=5).wait()
 
 
 if __name__ == '__main__':
