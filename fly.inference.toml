@@ -9,7 +9,7 @@ primary_region = "ams"
   dockerfile = "serving/Dockerfile"
 
   [build.args]
-    CHECKPOINT = "checkpoints/gpt_tinystories_dev.pkl"
+    CHECKPOINT = "checkpoints/gpt_tinystories_16M.pkl"
 
 [env]
   GRPC_PORT = "50051"
